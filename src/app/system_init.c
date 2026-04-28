@@ -13,29 +13,72 @@
 #include "motor/motor_control.h"
 #include "motor/motor_state_machine.h"
 #include "sensors/sensor_manager.h"
+#include "utils/uartstdio.h"
+#include "driverlib/uart.h"
+#include "driverlib/gpio.h"
+#include "inc/hw_memmap.h"
+#include "driverlib/pin_map.h"
+#include "driverlib/interrupt.h"
+#include "driverlib/pwm.h"
+#include "drivers/rtos_hw_drivers.h"
+
 
 uint32_t g_ui32SysClock = PROJECT_SYSTEM_CLOCK_HZ;
 
 void SystemInit_ConfigureBoard(void)
 {
-    /*
-     * Keep clock setup here so FreeRTOS, DriverLib, and MotorLib work together. 
-     * GPIO, ADC, PWM, I2C, UART, and interrupt setup can be added as we do modules
-     */
     g_ui32SysClock = MAP_SysCtlClockFreqSet((SYSCTL_XTAL_25MHZ |
                                              SYSCTL_OSC_MAIN |
                                              SYSCTL_USE_PLL |
                                              SYSCTL_CFG_VCO_240),
                                             PROJECT_SYSTEM_CLOCK_HZ);
+
+    // UART first so we can see debug prints immediately
+    PinoutSet(false, false);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    GPIOPinConfigure(GPIO_PA0_U0RX);
+    GPIOPinConfigure(GPIO_PA1_U0TX);
+    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    UARTClockSourceSet(UART0_BASE, UART_CLOCK_PIOSC);
+    UARTStdioConfig(0, 115200, 16000000);
+
+
+    IntMasterEnable();
 }
 
 void AppModules_Init(void)
 {
+    // MotorControl_Init();
+    // MotorStateMachine_Init();
+    // SensorManager_Init();
+    // GuiManager_Init();
+    // FaultManager_Init();
+    // Integration_Init();
+    // SerialPlotter_Init();
+
+    UARTprintf("AppModules_Init starting\r\n");
+
     MotorControl_Init();
+    UARTprintf("MotorControl_Init done\r\n");
+
     MotorStateMachine_Init();
+    UARTprintf("MotorStateMachine_Init done\r\n");
+
     SensorManager_Init();
+    UARTprintf("SensorManager_Init done\r\n");
+
     GuiManager_Init();
+    UARTprintf("GuiManager_Init done\r\n");
+
     FaultManager_Init();
+    UARTprintf("FaultManager_Init done\r\n");
+
     Integration_Init();
+    UARTprintf("Integration_Init done\r\n");
+
     SerialPlotter_Init();
+    UARTprintf("SerialPlotter_Init done\r\n");
+
+    UARTprintf("AppModules_Init complete\r\n");
 }
