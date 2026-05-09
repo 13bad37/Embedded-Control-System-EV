@@ -6,12 +6,13 @@
 
 #include "sensors/i2cOptDriver.h"
 #include "sensors/ambient_light_sensor.h"
+#include "sensors/sensor_manager.h"
 #include "tivaware_driverlib/uart.h"
 #include "common/uartstdio.h"
 #include "sensors/opt3001.h"
 #include "common/project_config.h"
 
-extern QueueHandle_t uartQueue;
+extern QueueHandle_t xSensorQueue;
 
 void AmbientLightSensor_Init(void)
 {
@@ -38,6 +39,8 @@ void AmbientLightSensor_Sample(void)
     {
         sensorOpt3001Convert(rawData, &convertedLux);
         lux_int = (int)convertedLux; 
-        xQueueSend(uartQueue, &lux_int, 0);
+        SensorMsg_t msg = { .type = MSG_LUX, .data.lux = lux_int };
+        xQueueSend(xSensorQueue, &msg, 0);
+        //UARTprintf("Lux: %5d\n", lux_int);
     }
 }

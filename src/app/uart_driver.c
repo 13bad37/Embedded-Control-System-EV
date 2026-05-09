@@ -13,14 +13,14 @@
 #include "driverlib/i2c.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
+#include "common/uartstdio.h"
 
 
 
-QueueHandle_t     uartQueue;
+
 
 void UART_Driver_Init(uint32_t sysClockFreq)
 {
-    uartQueue = xQueueCreate(8, sizeof(int));
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);

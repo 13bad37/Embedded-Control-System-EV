@@ -32,7 +32,8 @@ void SystemInit_ConfigureBoard(void)
                                             PROJECT_SYSTEM_CLOCK_HZ);
 
 
-    I2C_Driver_Init(g_ui32SysClock);
+    I2C0_Driver_Init(g_ui32SysClock);
+    I2C2_Driver_Init(g_ui32SysClock);
     UART_Driver_Init(g_ui32SysClock);
 }
 

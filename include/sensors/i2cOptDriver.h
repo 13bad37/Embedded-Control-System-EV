@@ -25,10 +25,5 @@
 extern bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data);
 extern bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data);
 
-typedef struct {
-    uint32_t sampleID;
-    int rawLux;
-    int filteredLux;
-} UARTMessage_t;
 
 #endif /* _I2COPTDRIVER_H_ */
