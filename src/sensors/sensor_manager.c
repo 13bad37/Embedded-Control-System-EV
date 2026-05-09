@@ -32,6 +32,7 @@ TaskHandle_t xSensorTaskHandle = NULL;
 
 QueueHandle_t     xSensorQueue;
 
+
 void vSensorCallback(TimerHandle_t xTimer) {
     xTaskNotifyGive(xSensorTaskHandle);
 }
@@ -42,10 +43,10 @@ void SensorManager_Init(void)
    
     xSensorQueue = xQueueCreate(5, sizeof(SensorMsg_t));
 
-    xTaskCreate(SensorPollingTask, "SensorTask", 512, NULL, tskIDLE_PRIORITY + 2, &xSensorTaskHandle);
+    xTaskCreate(SensorPollingTask, "SensorTask", 128, NULL, tskIDLE_PRIORITY + 1, &xSensorTaskHandle);
     TimerHandle_t xSensorTimer = xTimerCreate("SensorTimer", pdMS_TO_TICKS(1000), pdTRUE, NULL, vSensorCallback);
     xTimerStart(xSensorTimer, 0);
-    xTaskCreate(prvUARTTask, "UARTTask", 512, NULL, tskIDLE_PRIORITY + 1, NULL);
+    xTaskCreate(prvUARTTask, "UARTTask", 128, NULL, tskIDLE_PRIORITY + 1, NULL);
 
 
 }
@@ -55,11 +56,19 @@ static void SensorPollingTask(void *pvParameters)
 {
     AmbientLightSensor_Init();
 
+
+    // TickType_t xLastWakeTime = xTaskGetTickCount();
+    // const TickType_t xFrequency = pdMS_TO_TICKS(1000);
+
     while (1)
     {
         if(ulTaskNotifyTake(pdTRUE, portMAX_DELAY))
         {
+            // Wait exactly 1000ms. 
+            // vTaskDelayUntil(&xLastWakeTime, xFrequency);
+
             SensorManager_Poll();
+        
         }
     }
 }
@@ -67,32 +76,44 @@ static void SensorPollingTask(void *pvParameters)
 static void prvUARTTask(void *pvParameters)
 {
     SensorMsg_t msg;
+    static int s_rawLux         = 0;
+    static int s_rawTempC       = 0;
+    static int s_rawHumidPct    = 0;
+    static int s_rawDistance_mm = 0;
+    static SensorFilteredData_t s_filtered = {0};
+
     UARTprintf("UartTask: Started.\n");
 
     while (1)
     {
-
         if (xQueueReceive(xSensorQueue, &msg, portMAX_DELAY) == pdPASS)
         {
             switch (msg.type)
             {
                 case MSG_LUX:
-                    UARTprintf("Lux: %5d\n", msg.data.lux);
+                    s_rawLux = msg.data.lux;
                     break;
                 case MSG_SHT31:
-                    UARTprintf("SHT31 | Temp: %d C | Humid: %d %%\n",
-                               msg.data.sht31.tempC, msg.data.sht31.humidPct);
+                    s_rawTempC    = msg.data.sht31.tempC;
+                    s_rawHumidPct = msg.data.sht31.humidPct;
                     break;
                 case MSG_VL53L0X:
-                    UARTprintf("VL53L0X | Distance: %4d mm\n", msg.data.distance_mm);
+                    s_rawDistance_mm = msg.data.distance_mm;
                     break;
             }
+
+            SensorFilter_Update(s_rawLux, s_rawTempC, s_rawHumidPct, s_rawDistance_mm, &s_filtered);
+
+            UARTprintf("Lux: %5d | Temp: %d C | Humid: %d %% | Dist: %4d mm\n",
+                        s_filtered.lux, s_filtered.tempC, 
+                        s_filtered.humidPct, s_filtered.distance_mm);
         }
     }
 }
 
 void SensorManager_Poll(void)
 {
+    
     /*
      * Write up properly once sensor drivers are ready
      * For now this just gives the RTOS task a nice integration point.
@@ -103,9 +124,7 @@ void SensorManager_Poll(void)
     Sht31Sensor_Sample();
     Vl53l0xSensor_Sample();
 
-
-
-    SensorFilter_Update(&s_rawData, &s_filteredData);
+    //SensorFilter_Update(&msg, &s_filteredData);
 }
 
 EvSensorData_t SensorManager_GetRawData(void)

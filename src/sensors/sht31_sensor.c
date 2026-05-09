@@ -28,7 +28,7 @@ void Sht31Sensor_Sample(void)
         return;
     }
 
-    vTaskDelay(pdMS_TO_TICKS(100));
+    //vTaskDelay(pdMS_TO_TICKS(100));
 
 
     if (readI2C2_SHT31(0x44, rxData, 6))
