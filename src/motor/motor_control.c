@@ -1,14 +1,13 @@
 #include "motor/motor_control.h"
-
 #include "motor/motor_driver.h"
+#include "motor/motor_state_machine.h"
 #include "motor/ramp_controller.h"
 #include "motor/speed_controller.h"
+#include "common/project_config.h"
+#include "utils/uartstdio.h"
 
 static EvMotorStatus_t s_motorStatus = {
-    0U,
-    0U,
-    0U,
-    0U,
+    0U, 0U, 0U, 0U,
     EV_MOTOR_STATE_IDLE
 };
 
@@ -17,33 +16,84 @@ void MotorControl_Init(void)
     MotorDriver_Init();
     RampController_Init();
     SpeedController_Init();
+    MotorStateMachine_Init();
+    UARTprintf("MotorControl_Init done\r\n");
 }
 
 void MotorControl_Run(void)
 {
-    /* TODO: add control loop handoff later */
+    EvMotorState_t state = MotorStateMachine_GetState();
+
+    s_motorStatus.actual_speed_rpm = MotorDriver_GetRpm();
+    MotorStateMachine_UpdateActualRpm(s_motorStatus.actual_speed_rpm);
+
+    if (state == EV_MOTOR_STATE_STARTING)
+    {
+        if (MotorDriver_GetHallEdgeCount() >= HALL_VALID_EDGE_THRESHOLD)
+        {
+            MotorStateMachine_SetHallValid(true);
+        }
+    }
+
+    if (state == EV_MOTOR_STATE_RUNNING ||
+        state == EV_MOTOR_STATE_ESTOP_BRAKING)
+    {
+        /* Seed reference from actual on first entry so PI starts near operating point */
+        if (s_motorStatus.reference_speed_rpm == 0U)
+        {
+            s_motorStatus.reference_speed_rpm = s_motorStatus.actual_speed_rpm;
+            SpeedController_Reset();
+        }
+
+        uint8_t estop = (state == EV_MOTOR_STATE_ESTOP_BRAKING) ? 1U : 0U;
+
+        s_motorStatus.reference_speed_rpm = RampController_Update(
+            s_motorStatus.reference_speed_rpm,
+            s_motorStatus.desired_speed_rpm,
+            PROJECT_MOTOR_TASK_PERIOD_MS,
+            estop
+        );
+
+        s_motorStatus.pwm_duty_per_mille = SpeedController_Update(
+            s_motorStatus.reference_speed_rpm,
+            s_motorStatus.actual_speed_rpm
+        );
+
+        /* DEBUG - remove once working */
+        UARTprintf("PI: ref=%d actual=%d duty=%d\r\n",
+            s_motorStatus.reference_speed_rpm,
+            s_motorStatus.actual_speed_rpm,
+            s_motorStatus.pwm_duty_per_mille);
+
+        MotorDriver_SetPwmDuty(s_motorStatus.pwm_duty_per_mille);
+    }
+    else
+    {
+        SpeedController_Reset();
+        s_motorStatus.reference_speed_rpm = 0U;
+    }
+
+    s_motorStatus.state = state;
 }
 
 void MotorControl_Start(void)
 {
-    /* TODO: request Idle -> Starting through the state machine. */
+    MotorStateMachine_RequestStart();
 }
 
 void MotorControl_Stop(void)
 {
-    
+    MotorStateMachine_RequestStop();
 }
 
 void MotorControl_SetSpeed(uint32_t rpm)
 {
     s_motorStatus.desired_speed_rpm = rpm;
-    /* TODO: store the user desired RPM for the ramped reference calculation. */
 }
 
 void MotorControl_EStop(EvFaultCode_t fault)
 {
-    (void)fault;
-    /* TODO: transition into E-Stop Braking. */
+    MotorStateMachine_RequestEStop(fault);
 }
 
 uint32_t MotorControl_GetSpeed(void)

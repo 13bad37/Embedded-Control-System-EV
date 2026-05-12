@@ -5,13 +5,21 @@
 #include "driverlib/gpio.h"
 #include "driverlib/sysctl.h"
 #include "driverlib/interrupt.h"
+#include "driverlib/timer.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "utils/uartstdio.h"
+#include <stdbool.h>
+
 extern uint32_t g_ui32SysClock;
 static void HallSensorHandler(void);
 
+static volatile uint32_t s_hallEdgeCount     = 0U;
+static volatile uint32_t s_lastEdgeTimestamp = 0U;
+static volatile uint32_t s_edgePeriodTicks   = 0U;
+static volatile uint8_t  s_hallEdgeValid     = 0U;
 void MotorDriver_Init(void)
 {
     UARTprintf("SysClock value: %d\r\n", g_ui32SysClock);
@@ -21,6 +29,14 @@ void MotorDriver_Init(void)
     UARTprintf("initMotorLib returned: %d\r\n", result);
     initMotorLib(PROJECT_MOTORLIB_PWM_PERIOD_US);
     UARTprintf("initMotorLib done\r\n");
+
+    /* Hardware timer for hall edge timestamping */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_TIMER1));
+    TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC_UP);
+    TimerLoadSet(TIMER1_BASE, TIMER_A, 0xFFFFFFFF);
+    TimerEnable(TIMER1_BASE, TIMER_A);
+    UARTprintf("Hall timestamp timer started\r\n");
 
     UARTprintf("GPIO peripheral enable starting\r\n");
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
@@ -56,55 +72,102 @@ void MotorDriver_Init(void)
     IntPrioritySet(INT_GPIOH, 0xC0);
     IntPrioritySet(INT_GPION, 0xC0);
     UARTprintf("Priorities set\r\n");
-
-
 }
 
 void MotorDriver_KickstartPlaceholder(void)
 {
-    /*
-     * Assignment startup flow needs an open loop kickstart before closed loop.
-     * Hook this to MotorLib once state machine logic is being written
-     */
+    uint32_t edgesBefore = MotorDriver_GetHallEdgeCount();
+
+    for (uint16_t duty = 10U; duty <= 45U; duty += 5U)
+    {
+        /* Refresh hall state at each step so MotorLib can commutate */
+        bool hall_a = (bool)(GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_3) & GPIO_PIN_3);
+        bool hall_b = (bool)(GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_2) & GPIO_PIN_2);
+        bool hall_c = (bool)(GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_2) & GPIO_PIN_2);
+
+        updateMotor(hall_a, hall_b, hall_c);
+        setDuty(duty);
+
+        UARTprintf("Kickstart: duty=%d hall A=%d B=%d C=%d\r\n",
+            duty, hall_a, hall_b, hall_c);
+
+        vTaskDelay(pdMS_TO_TICKS(150));
+
+        if (MotorDriver_GetHallEdgeCount() > edgesBefore + 2U)
+        {
+            UARTprintf("Motor started at duty=%d\r\n", duty);
+            return;
+        }
+    }
+
+    UARTprintf("WARNING: Motor did not start during kickstart\r\n");
 }
 
 void MotorDriver_EnableOutputs(void)
 {
+    enableMotor();
     /* TODO: call enableMotor() when hardware init is ready. */
 }
 
 void MotorDriver_DisableOutputs(void)
 {
-    /* TODO: ^^^ disableMotor() ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ */
+    disableMotor();
+    /* TODO: disableMotor() */
 }
 
 void MotorDriver_SetPwmDuty(uint16_t duty_per_mille)
 {
-    // (void)duty_per_mille;
-    // Scale 0-1000 down to 0-PWM_PERIOD
-    uint16_t scaled = (uint16_t)((duty_per_mille * PROJECT_MOTORLIB_PWM_PERIOD_US) / 1000U);
-    setDuty(scaled);
- 
+    setDuty(duty_per_mille);
 }
 
 void MotorDriver_UpdateCommutationFromHall(uint8_t hall_a, uint8_t hall_b, uint8_t hall_c)
 {
-    // (void)hall_a;
-    // (void)hall_b;
-    // (void)hall_c;
-    /* TODO: */
     updateMotor((bool)hall_a, (bool)hall_b, (bool)hall_c);
+}
+
+uint32_t MotorDriver_GetHallEdgeCount(void)
+{
+    return s_hallEdgeCount;
+}
+
+uint32_t MotorDriver_GetRpm(void)
+{
+    if (!s_hallEdgeValid || s_edgePeriodTicks == 0U)
+    {
+        return 0U;
+    }
+
+    /* If no edge for more than 200ms, motor has stopped */
+    uint32_t now = TimerValueGet(TIMER1_BASE, TIMER_A);
+    uint32_t timeSinceLastEdge = now - s_lastEdgeTimestamp;
+    if (timeSinceLastEdge > (g_ui32SysClock / 5U))  /* 200ms */
+    {
+        return 0U;
+    }
+
+    uint32_t rpm = (uint32_t)(((uint64_t)g_ui32SysClock * 60ULL) /
+                   ((uint64_t)s_edgePeriodTicks * (PROJECT_MOTOR_POLE_PAIRS * 6U)));
+    return rpm;
 }
 
 static void HallSensorHandler(void)
 {
+    uint32_t now = TimerValueGet(TIMER1_BASE, TIMER_A);
+
+    if (s_hallEdgeValid)
+    {
+        s_edgePeriodTicks = now - s_lastEdgeTimestamp;
+    }
+    s_lastEdgeTimestamp = now;
+    s_hallEdgeValid = 1U;
+    s_hallEdgeCount++;
+
     bool hall_a = (bool)(GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_3) & GPIO_PIN_3);
     bool hall_b = (bool)(GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_2) & GPIO_PIN_2);
     bool hall_c = (bool)(GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_2) & GPIO_PIN_2);
 
     MotorDriver_UpdateCommutationFromHall(hall_a, hall_b, hall_c);
 
-    // Clear all three ports — any of them could have triggered
     GPIOIntClear(GPIO_PORTM_BASE, GPIO_INT_PIN_3);
     GPIOIntClear(GPIO_PORTH_BASE, GPIO_INT_PIN_2);
     GPIOIntClear(GPIO_PORTN_BASE, GPIO_INT_PIN_2);

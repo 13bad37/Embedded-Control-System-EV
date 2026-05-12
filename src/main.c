@@ -15,7 +15,6 @@
 int main(void)
 {
     SystemInit_ConfigureBoard();
-    AppModules_Init();
 
     UARTprintf("Starting AppModules_Init\r\n");
     AppModules_Init();
@@ -38,29 +37,6 @@ int main(void)
     vTaskStartScheduler();
 
     UARTprintf("ERROR: Scheduler returned - heap too small?\r\n");
-
-
-    if (MessageBus_Init() != pdPASS)
-    {
-        /* Can replace later when we implement proper starup fault handling */
-        for (;;)
-        {
-        }
-    }
-
-    if (RtosTasks_CreateAll() != pdPASS)
-    {
-
-        for (;;)
-        {
-        }
-    }
-
-    vTaskStartScheduler();
-
-
-    for (;;)
-    {
-    }
+    for (;;) {}
 }
 
