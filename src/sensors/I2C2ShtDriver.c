@@ -20,8 +20,8 @@ typedef enum {
     IDLE_1,
     SHT_WRITE_CMD,
     SHT_READ_DATA,
-    VL_WRITE_DATA,   // Writes 1 byte of data to a register
-    VL_READ_START,   // Triggers the repeated start for a 1-byte read
+    VL_WRITE_DATA,  
+    VL_READ_START,   
     VL_READ_FINISH
 } i2c2_state;
 

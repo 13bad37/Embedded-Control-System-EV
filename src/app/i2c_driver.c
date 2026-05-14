@@ -15,15 +15,16 @@
 #include "inc/hw_ints.h"
 
 // The global semaphore handle
-SemaphoreHandle_t I2C0Semaphore;
+SemaphoreHandle_t I2CSemaphore;
 SemaphoreHandle_t I2C2Semaphore;
 
-void I2C0_Driver_Init(uint32_t sysClockFreq)
+
+void I2C_Driver_Init(uint32_t sysClockFreq)
 {
-    I2C0Semaphore = xSemaphoreCreateBinary();
+    I2CSemaphore = xSemaphoreCreateBinary();
     
 
-    if (I2C0Semaphore == NULL) {
+    if (I2CSemaphore == NULL) {
         while(1); 
     }
 
@@ -35,8 +36,6 @@ void I2C0_Driver_Init(uint32_t sysClockFreq)
 
     GPIOPinConfigure(GPIO_PB2_I2C0SCL);
     GPIOPinConfigure(GPIO_PB3_I2C0SDA);
-
-    
 
     GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
     GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);

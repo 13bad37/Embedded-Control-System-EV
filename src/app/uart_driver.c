@@ -18,9 +18,9 @@
 
 
 
-
 void UART_Driver_Init(uint32_t sysClockFreq)
 {
+    
 
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);

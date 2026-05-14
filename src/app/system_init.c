@@ -6,6 +6,11 @@
 #include "app/fault_manager.h"
 #include "app/integration.h"
 #include "app/i2c_driver.h"
+#include "app/GPIO_Init.h"
+#include "app/hall_timer_init.h"
+#include "app/power_timer_init.h" // not needed?
+#include "app/uart_driver.h"
+#include "app/adc_init.h"
 #include "common/serial_plotter.h"
 #include "common/project_config.h"
 #include "driverlib/rom_map.h"
@@ -32,9 +37,14 @@ void SystemInit_ConfigureBoard(void)
                                             PROJECT_SYSTEM_CLOCK_HZ);
 
 
-    I2C0_Driver_Init(g_ui32SysClock);
-    I2C2_Driver_Init(g_ui32SysClock);
+    I2C_Driver_Init(g_ui32SysClock);
+    I2C2_Driver_Init(g_ui32SysClock);   
     UART_Driver_Init(g_ui32SysClock);
+    HallGpioInit();
+    HallTimerInit();
+    prvADCInit();
+    powerTimerInit(); //enable when adc handling works 
+
 }
 
 void AppModules_Init(void)

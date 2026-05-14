@@ -1,0 +1,1 @@
+void UART_Driver_Init(uint32_t sysClockFreq);

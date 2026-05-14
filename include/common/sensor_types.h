@@ -26,6 +26,4 @@ typedef struct
 {
     uint32_t max_motor_power_w;
     uint16_t min_distance_mm;
-    int16_t cooling_threshold_c_x10;
-    int16_t heating_threshold_c_x10;
 } EvSensorThresholds_t;

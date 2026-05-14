@@ -4,9 +4,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "semphr.h"
-#include "timers.h"
-#include "queue.h"
-#include "task.h"
+#include"queue.h"
 
 #include "sensors/sensor_manager.h"
 
@@ -18,123 +16,71 @@
 #include "sensors/vl53l0x_sensor.h"
 #include "tivaware_driverlib/uart.h"
 #include "common/uartstdio.h"
-#include "sensors/i2c2ShtDriver.h"
 
-static EvSensorData_t s_rawData;
+#define EMERGENCY_DISTANCE_MM     300
+
+
+static EvSensorDataRaw_t s_rawData;
 static EvSensorData_t s_filteredData;
 static EvSensorThresholds_t s_thresholds;
-extern QueueHandle_t xSensorQueue;
-
-static void SensorPollingTask(void *pvParameters);
-static void prvUARTTask( void *pvParameters );
-
-TaskHandle_t xSensorTaskHandle = NULL;
-
-QueueHandle_t     xSensorQueue;
-
-
-void vSensorCallback(TimerHandle_t xTimer) {
-    xTaskNotifyGive(xSensorTaskHandle);
-}
-
-    
-void SensorManager_Init(void)
-{
-   
-    xSensorQueue = xQueueCreate(5, sizeof(SensorMsg_t));
-
-    xTaskCreate(SensorPollingTask, "SensorTask", 128, NULL, tskIDLE_PRIORITY + 1, &xSensorTaskHandle);
-    TimerHandle_t xSensorTimer = xTimerCreate("SensorTimer", pdMS_TO_TICKS(1000), pdTRUE, NULL, vSensorCallback);
-    xTimerStart(xSensorTimer, 0);
-    xTaskCreate(prvUARTTask, "UARTTask", 128, NULL, tskIDLE_PRIORITY + 1, NULL);
-
-
-}
-
 
 static void SensorPollingTask(void *pvParameters)
 {
     AmbientLightSensor_Init();
+    MotorPowerSensor_Init();
+    HallSpeedSensor_Init();
+    Sht31Sensor_Init();
+    Vl53l0xSensor_Init(); 
+    //These inits must run after scheduler starts so a one shot task is created to do it once (deletes after one)
 
-
-    // TickType_t xLastWakeTime = xTaskGetTickCount();
-    // const TickType_t xFrequency = pdMS_TO_TICKS(1000);
-
-    while (1)
-    {
-        if(ulTaskNotifyTake(pdTRUE, portMAX_DELAY))
-        {
-            // Wait exactly 1000ms. 
-            // vTaskDelayUntil(&xLastWakeTime, xFrequency);
-
-            SensorManager_Poll();
-        
-        }
-    }
+    vTaskDelete(NULL);
 }
 
-static void prvUARTTask(void *pvParameters)
+
+void SensorManager_Init(void)
 {
-    SensorMsg_t msg;
-    static int s_rawLux         = 0;
-    static int s_rawTempC       = 0;
-    static int s_rawHumidPct    = 0;
-    static int s_rawDistance_mm = 0;
-    static SensorFilteredData_t s_filtered = {0};
-
-    UARTprintf("UartTask: Started.\n");
-
-    while (1)
-    {
-        if (xQueueReceive(xSensorQueue, &msg, portMAX_DELAY) == pdPASS)
-        {
-            switch (msg.type)
-            {
-                case MSG_LUX:
-                    s_rawLux = msg.data.lux;
-                    break;
-                case MSG_SHT31:
-                    s_rawTempC    = msg.data.sht31.tempC;
-                    s_rawHumidPct = msg.data.sht31.humidPct;
-                    break;
-                case MSG_VL53L0X:
-                    s_rawDistance_mm = msg.data.distance_mm;
-                    break;
-            }
-
-            SensorFilter_Update(s_rawLux, s_rawTempC, s_rawHumidPct, s_rawDistance_mm, &s_filtered);
-
-            UARTprintf("Lux: %5d | Temp: %d C | Humid: %d %% | Dist: %4d mm\n",
-                        s_filtered.lux, s_filtered.tempC, 
-                        s_filtered.humidPct, s_filtered.distance_mm);
-        }
-    }
+    xTaskCreate(SensorPollingTask, "SensorTask", 128, NULL, 2, NULL);
 }
 
-void SensorManager_Poll(void)
+EvSensorDataRaw_t SensorManager_GetRawData(void)
 {
-    
-    /*
-     * Write up properly once sensor drivers are ready
-     * For now this just gives the RTOS task a nice integration point.
-     */
-    AmbientLightSensor_Sample();
-    //MotorPowerSensor_Sample();
-    //HallSpeedSensor_Sample();
-    Sht31Sensor_Sample();
-    Vl53l0xSensor_Sample();
+    EvSensorDataRaw_t data;
+    int32_t rawLux;
+    int32_t rawTempC;
+    int32_t rawHumidPct;
+    uint16_t rawDistanceMm;
 
-    //SensorFilter_Update(&msg, &s_filteredData);
-}
+    data = s_rawData;
+    if (AmbientLightSensor_GetRawLux(&rawLux)){data.lux = rawLux;}
+    if (Sht31Sensor_GetRawTemperatureC(&rawTempC)){data.temperatureC = rawTempC;}
+    if (Sht31Sensor_GetRawHumidityPct(&rawHumidPct)){data.humidityRh = rawHumidPct;}
+    if (Vl53l0xSensor_GetRawDistanceMm(&rawDistanceMm)){data.distanceMm = rawDistanceMm;}
+    data.motor_speed_rpm = (int32_t)HallSpeedSensor_GetRawRPM();
+    data.motor_power_w = (uint32_t)MotorPowerSensor_GetRawPowerW();
 
-EvSensorData_t SensorManager_GetRawData(void)
-{
-    return s_rawData;
+    s_rawData = data;
+    return data;
 }
 
 EvSensorData_t SensorManager_GetFilteredData(void)
 {
-    return s_filteredData;
+    EvSensorData_t data;
+    int32_t filteredLux;
+    int32_t filteredTempC;
+    int32_t filteredHumidPct;
+    uint16_t filteredDistanceMm;
+
+    data = s_filteredData;
+
+    if (AmbientLightSensor_GetFilteredLux(&filteredLux)){data.ambient_light_lux = filteredLux;}
+    if (Sht31Sensor_GetFilteredTemperatureC(&filteredTempC)){data.cabin_temperature_c_x10 = filteredTempC;}
+    if (Sht31Sensor_GetFilteredHumidityPct(&filteredHumidPct)){data.cabin_humidity_rh_x10 = filteredHumidPct;}
+    if (Vl53l0xSensor_GetFilteredDistanceMm(&filteredDistanceMm)){data.distance_mm = filteredDistanceMm;}
+    data.motor_speed_rpm = (int32_t)HallSpeedSensor_GetRPM();
+    data.motor_power_w = (uint32_t)MotorPowerSensor_GetFilteredPowerW();
+    s_filteredData = data;
+
+    return data;
 }
 
 EvSensorThresholds_t SensorManager_GetThresholds(void)
@@ -142,10 +88,72 @@ EvSensorThresholds_t SensorManager_GetThresholds(void)
     return s_thresholds;
 }
 
-void SensorManager_SetThresholds(const EvSensorThresholds_t *thresholds)
+EvSensorThresholds_t SensorManager_CheckThresholds(void)
 {
-    if (thresholds != 0)
+    uint16_t filteredDist;
+
+
+    if (Vl53l0xSensor_GetFilteredDistanceMm(&filteredDist))
     {
-        s_thresholds = *thresholds;
+        if (filteredDist < EMERGENCY_DISTANCE_MM)
+        {
+            //FaultManager_TriggerEStop();
+            //UARTprintf("EmergencySTOP");
+        }
     }
+
+    // if (MotorPowerSensor_IsOvercurrent())
+    // {
+    //     FaultManager_TriggerEStop();
+    // }
+}
+
+static void SensorDebug_Print(void)
+{
+    int32_t rawLux;
+    int32_t filteredLux;
+    int32_t rawTempC;
+    int32_t filteredTempC;
+    int32_t rawHumidPct;
+    int32_t filteredHumidPct;
+    uint16_t rawDistanceMm;
+    uint16_t filteredDistanceMm;
+    int rawRpm = HallSpeedSensor_GetRawRPM();
+    int filteredRpm = HallSpeedSensor_GetRPM();
+    float rawPower = MotorPowerSensor_GetRawPowerW();
+    float filteredPower = MotorPowerSensor_GetFilteredPowerW();
+
+    if (AmbientLightSensor_GetRawLux(&rawLux) &&
+        AmbientLightSensor_GetFilteredLux(&filteredLux) &&
+        Sht31Sensor_GetRawTemperatureC(&rawTempC) &&
+        Sht31Sensor_GetFilteredTemperatureC(&filteredTempC) &&
+        Sht31Sensor_GetRawHumidityPct(&rawHumidPct) &&
+        Sht31Sensor_GetFilteredHumidityPct(&filteredHumidPct) &&
+        Vl53l0xSensor_GetRawDistanceMm(&rawDistanceMm) &&
+        Vl53l0xSensor_GetFilteredDistanceMm(&filteredDistanceMm))
+    {
+        UARTprintf("RawLux:%d FilteredLux:%d RawTempC:%d FilteredTempC:%d RawHumidPct:%d FilteredHumidPct:%d RawDistanceMm:%d FilteredDistanceMm:%d RawRpm:%d FilteredRpm:%d rawPower:%d, FilteredPower:%d\n",
+                   rawLux,
+                   filteredLux,
+                   rawTempC,
+                   filteredTempC,
+                   rawHumidPct,
+                   filteredHumidPct,
+                   rawDistanceMm,
+                   filteredDistanceMm,
+                   rawRpm,
+                   filteredRpm,
+                   rawPower,
+                   filteredPower);
+    }
+}
+
+void SensorManager_Poll(void)
+{
+    AmbientLightSensor_Sample();
+    Sht31Sensor_Sample();
+    Vl53l0xSensor_Sample();
+
+    SensorManager_CheckThresholds();
+    SensorDebug_Print();
 }

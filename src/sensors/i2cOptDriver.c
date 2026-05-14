@@ -20,7 +20,7 @@
 #include "driverlib/sysctl.h"
 
 
-extern SemaphoreHandle_t I2C0Semaphore;
+extern SemaphoreHandle_t I2CSemaphore;
 
 typedef enum { //make switch case for I2C ISR so it will never be in a waiting state and will immediately write or read datas
     IDLE,
@@ -51,7 +51,7 @@ void I2C0_Handler(void)
     if (I2CMasterErr(I2C0_BASE) != I2C_MASTER_ERR_NONE) //error handling - if error return to task without giving semaphore, otherwise will wait for data that isn't there
     { 
         state = IDLE;
-        xSemaphoreGiveFromISR(I2C0Semaphore, &xSensorTaskWoken);
+        xSemaphoreGiveFromISR(I2CSemaphore, &xSensorTaskWoken);
         portYIELD_FROM_ISR(xSensorTaskWoken);
         return; 
     }
@@ -67,7 +67,7 @@ void I2C0_Handler(void)
             I2CMasterDataPut(I2C0_BASE, I2Cdata[1]);
             I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
             state = IDLE;
-            xSemaphoreGiveFromISR(I2C0Semaphore, &xSensorTaskWoken);
+            xSemaphoreGiveFromISR(I2CSemaphore, &xSensorTaskWoken);
             break;
         case WRITEREAD:
             I2CMasterSlaveAddrSet(I2C0_BASE, I2CAddress, true);
@@ -82,7 +82,7 @@ void I2C0_Handler(void)
         case READD1:
             I2Cdata[1] = I2CMasterDataGet(I2C0_BASE);
             state = IDLE;
-            xSemaphoreGiveFromISR(I2C0Semaphore, &xSensorTaskWoken);
+            xSemaphoreGiveFromISR(I2CSemaphore, &xSensorTaskWoken);
             break;
     }
 
@@ -106,7 +106,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterDataPut(I2C0_BASE, ui8Reg);
     I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
 
-    if (xSemaphoreTake(I2C0Semaphore, pdMS_TO_TICKS(100)) == pdTRUE) 
+    if (xSemaphoreTake(I2CSemaphore, pdMS_TO_TICKS(100)) == pdTRUE) 
     {
         return true;
     }
@@ -137,7 +137,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
 
     //I2CMasterSlaveAddrSet(I2C0_BASE, ui8Addr, true);
-    if (xSemaphoreTake(I2C0Semaphore, pdMS_TO_TICKS(100)) == pdTRUE) 
+    if (xSemaphoreTake(I2CSemaphore, pdMS_TO_TICKS(100)) == pdTRUE) 
     {
         return true;
     }
