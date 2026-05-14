@@ -115,7 +115,6 @@ void Vl53l0xSensor_Init(void)
 
 void Vl53l0xSensor_Sample(void)
 {
-    uint8_t status = 0;
     uint8_t rxData[2] = {0};
     uint16_t distanceMm;
     TickType_t currentTick;

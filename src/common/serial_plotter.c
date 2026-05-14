@@ -14,7 +14,7 @@ void SerialPlotter_SendMotorFrame(const EvMotorStatus_t *status)
     /* TODO: send desired/reference/actual speed and PWM duty over UART. */
 }
 
-void SerialPlotter_SendSensorFrame(const EvSensorData_t *raw, const EvSensorData_t *filtered)
+void SerialPlotter_SendSensorFrame(const EvSensorDataRaw_t *raw, const EvSensorData_t *filtered)
 {
     (void)raw;
     (void)filtered;
