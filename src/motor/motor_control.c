@@ -14,7 +14,7 @@ static EvMotorStatus_t s_motorStatus = {
 void MotorControl_Init(void)
 {
     MotorDriver_Init();
-    RampController_Init();
+    //RampController_Init();
     SpeedController_Init();
     MotorStateMachine_Init();
     UARTprintf("MotorControl_Init done\r\n");
@@ -60,10 +60,10 @@ void MotorControl_Run(void)
         );
 
         /* DEBUG - remove once working */
-        UARTprintf("PI: ref=%d actual=%d duty=%d\r\n",
-            s_motorStatus.reference_speed_rpm,
-            s_motorStatus.actual_speed_rpm,
-            s_motorStatus.pwm_duty_per_mille);
+        // UARTprintf("PI: ref=%d actual=%d duty=%d\r\n",
+        //     s_motorStatus.reference_speed_rpm,
+        //     s_motorStatus.actual_speed_rpm,
+        //     s_motorStatus.pwm_duty_per_mille);
 
         MotorDriver_SetPwmDuty(s_motorStatus.pwm_duty_per_mille);
     }

@@ -3,8 +3,13 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "app/adc_init.h"
+#include "app/i2c_driver.h"
+#include "app/uart_driver.h"
 #include "app/fault_manager.h"
 #include "app/integration.h"
+#include "app/power_timer_init.h"
+#include "app/hall_timer_init.h"
 #include "common/serial_plotter.h"
 #include "common/project_config.h"
 #include "driverlib/rom_map.h"
@@ -33,16 +38,13 @@ void SystemInit_ConfigureBoard(void)
                                              SYSCTL_CFG_VCO_240),
                                             PROJECT_SYSTEM_CLOCK_HZ);
 
-    // UART first so we can see debug prints immediately
-    PinoutSet(false, false);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
-    GPIOPinConfigure(GPIO_PA0_U0RX);
-    GPIOPinConfigure(GPIO_PA1_U0TX);
-    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
-    UARTClockSourceSet(UART0_BASE, UART_CLOCK_PIOSC);
-    UARTStdioConfig(0, 115200, 16000000);
-
+  
+    //I2C_Driver_Init(g_ui32SysClock);
+    prvADCInit();
+    I2C2_Driver_Init(g_ui32SysClock);   
+    UART_Driver_Init(g_ui32SysClock);
+    powerTimerInit();
+    //HallTimerInit();
 
     IntMasterEnable();
 }

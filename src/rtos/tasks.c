@@ -93,7 +93,7 @@ void SerialPlotTask(void *parameters)
     for (;;)
     {
         EvMotorStatus_t motorStatus = MotorControl_GetStatus();
-        EvSensorData_t raw = SensorManager_GetRawData();
+        EvSensorDataRaw_t raw = SensorManager_GetRawData();
         EvSensorData_t filtered = SensorManager_GetFilteredData();
 
         SerialPlotter_SendMotorFrame(&motorStatus);
