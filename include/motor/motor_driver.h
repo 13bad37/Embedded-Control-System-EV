@@ -11,3 +11,5 @@ void MotorDriver_UpdateCommutationFromHall(uint8_t hall_a, uint8_t hall_b, uint8
 uint32_t MotorDriver_GetHallEdgeCount(void);
 uint32_t MotorDriver_GetRpm(void);
 void MotorDriver_ResetHallState(void);
+void MotorDriver_SetCommutationEnabled(uint8_t enabled);
+

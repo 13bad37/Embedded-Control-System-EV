@@ -25,7 +25,7 @@ void MotorControlTask(void *parameters)
 
     SemaphoreHandle_t estopSem = MessageBus_GetEstopSemaphore();
 
-    MotorControl_SetSpeed(1500U);  /* start with a moderate speed command to reduce startup current spike */
+    MotorControl_SetSpeed(1100U);  /* start with a moderate speed command to reduce startup current spike */
     MotorControl_Start();
 
     for (;;)

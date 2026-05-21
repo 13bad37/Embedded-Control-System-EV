@@ -11,7 +11,7 @@
 #include "semphr.h"
 #include "task.h"
 
-#define ESTOP_MAX_DUTY_THRESHOLD    38U
+#define ESTOP_MAX_DUTY_THRESHOLD    32U
 
 static bool s_estopTriggered = false;
 

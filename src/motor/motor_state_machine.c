@@ -18,32 +18,17 @@ static EvMotorState_t    s_motorState   = EV_MOTOR_STATE_IDLE;
 static EvMotorSmInputs_t s_inputs       = {0};
 static EvFaultCode_t     s_latchedFault = EV_FAULT_NONE;
 
-static void EnterIdle(void)
-{
-    UARTprintf("State: IDLE\r\n");
-    MotorDriver_DisableOutputs();
-    s_motorState = EV_MOTOR_STATE_IDLE;
-}
-
-static void EnterStarting(void)
-{
-    UARTprintf("State: STARTING — EnterStarting called\r\n");
-    MotorDriver_ResetHallState();
-    MotorDriver_EnableOutputs();
-    MotorDriver_KickstartPlaceholder();
-    s_inputs.hallFeedbackValid = false;
-    s_motorState = EV_MOTOR_STATE_STARTING;
-}
-
 static void EnterRunning(void)
 {
     UARTprintf("State: RUNNING\r\n");
+    MotorDriver_SetCommutationEnabled(1U);
     s_motorState = EV_MOTOR_STATE_RUNNING;
 }
 
 static void EnterEStopBraking(EvFaultCode_t fault)
 {
     UARTprintf("State: ESTOP_BRAKING fault=%d\r\n", fault);
+    MotorDriver_SetCommutationEnabled(0U);
     s_latchedFault = fault;
     s_motorState = EV_MOTOR_STATE_ESTOP_BRAKING;
 }
@@ -51,8 +36,27 @@ static void EnterEStopBraking(EvFaultCode_t fault)
 static void EnterFaultLatched(void)
 {
     UARTprintf("State: FAULT_LATCHED\r\n");
+    MotorDriver_SetCommutationEnabled(0U);
     MotorDriver_DisableOutputs();
     s_motorState = EV_MOTOR_STATE_FAULT_LATCHED;
+}
+
+static void EnterIdle(void)
+{
+    UARTprintf("State: IDLE\r\n");
+    MotorDriver_SetCommutationEnabled(0U);
+    MotorDriver_DisableOutputs();
+    s_motorState = EV_MOTOR_STATE_IDLE;
+}
+
+static void EnterStarting(void)
+{
+    UARTprintf("State: STARTING\r\n");
+    MotorDriver_SetCommutationEnabled(1U);
+    MotorDriver_EnableOutputs();
+    MotorDriver_KickstartPlaceholder();
+    s_inputs.hallFeedbackValid = false;
+    s_motorState = EV_MOTOR_STATE_STARTING;
 }
 
 void MotorStateMachine_Init(void)
