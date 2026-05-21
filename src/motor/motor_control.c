@@ -67,16 +67,16 @@ void MotorControl_Run(void)
             s_motorStatus.reference_speed_rpm = s_motorStatus.actual_speed_rpm;
             SpeedController_Reset();
         }
-    
+
         uint8_t estop = (state == EV_MOTOR_STATE_ESTOP_BRAKING) ? 1U : 0U;
-    
+
         s_motorStatus.reference_speed_rpm = RampController_Update(
             s_motorStatus.reference_speed_rpm,
             s_motorStatus.desired_speed_rpm,
             PROJECT_MOTOR_TASK_PERIOD_MS,
             estop
         );
-    
+
         if (estop)
         {
             /* During estop just map reference directly to duty
@@ -92,8 +92,11 @@ void MotorControl_Run(void)
                 s_motorStatus.reference_speed_rpm,
                 s_motorStatus.actual_speed_rpm
             );
+            // UARTprintf("actual=%d ref=%d\r\n",
+            //     s_motorStatus.actual_speed_rpm,
+            //     s_motorStatus.reference_speed_rpm);
         }
-    
+
         MotorDriver_SetPwmDuty(s_motorStatus.pwm_duty_per_mille);
     }
     else

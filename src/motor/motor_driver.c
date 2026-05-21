@@ -21,6 +21,12 @@ static volatile uint32_t s_hallEdgeCount     = 0U;
 static volatile uint32_t s_lastEdgeTimestamp = 0U;
 static volatile uint32_t s_edgePeriodTicks   = 0U;
 static volatile uint8_t  s_hallEdgeValid     = 0U;
+static volatile uint8_t s_commutationEnabled = 1U;
+
+void MotorDriver_SetCommutationEnabled(uint8_t enabled)
+{
+    s_commutationEnabled = enabled;
+}
 
 void MotorDriver_Init(void)
 {
@@ -181,11 +187,7 @@ static void HallSensorHandler(void)
     s_hallEdgeValid = 1U;
     s_hallEdgeCount++;
 
-    /* Only commutate if motor is running or starting —
-       prevents MotorLib re-energising phases during braking */
-    EvMotorState_t state = MotorControl_GetState();
-    if (state == EV_MOTOR_STATE_RUNNING ||
-        state == EV_MOTOR_STATE_STARTING)
+    if (s_commutationEnabled)
     {
         bool hall_a = (bool)(GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_3) & GPIO_PIN_3);
         bool hall_b = (bool)(GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_2) & GPIO_PIN_2);

@@ -2,10 +2,10 @@
 #include "common/project_config.h"
 
 #define PI_KP               0.01f
-#define PI_KI               0.005f
+#define PI_KI               0.008f
 #define PI_INTEGRAL_MAX     3.0f
 #define PI_INTEGRAL_MIN    -3.0f
-#define PI_OUTPUT_MAX       30U     /* reduced from 50 — prevents overcurrent */
+#define PI_OUTPUT_MAX       25U     /* reduced from 50 — prevents overcurrent */
 #define PI_OUTPUT_MIN       0U
 
 typedef struct {
@@ -51,11 +51,11 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
 
     /* DEBUG */
     /* Replace the UARTprintf debug line with this */
-    UARTprintf("PI: err=%d int=%d corr=%d out=%d\r\n",
-        (int)error,
-        (int)(s_pi.integral * 100),   /* multiply by 100 to see 2 decimal places */
-        (int)(correction * 100),
-        (int)output);
+    // UARTprintf("PI: err=%d int=%d corr=%d out=%d\r\n",
+    //     (int)error,
+    //     (int)(s_pi.integral * 100),   /* multiply by 100 to see 2 decimal places */
+    //     (int)(correction * 100),
+    //     (int)output);
 
     return (uint16_t)output;
 }
