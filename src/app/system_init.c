@@ -40,6 +40,7 @@ void SystemInit_ConfigureBoard(void)
 
   
     //I2C_Driver_Init(g_ui32SysClock);
+    rawdataQueue = xQueueCreate(10, sizeof(SensorMsg_t));
     prvADCInit();
     I2C2_Driver_Init(g_ui32SysClock);   
     UART_Driver_Init(g_ui32SysClock);

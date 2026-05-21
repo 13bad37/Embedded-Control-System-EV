@@ -14,11 +14,11 @@
 
 #define OPT3001_SAMPLE_PERIOD_MS          500
 
-extern EvSensorDataRaw_t s_rawData;
+//extern EvSensorDataRaw_t s_rawData;
 
 static TickType_t s_lastSampleTick;
 
-
+uint16_t lux;
 
 void AmbientLightSensor_Init(void)
 {
@@ -40,6 +40,7 @@ void AmbientLightSensor_Sample(void)
     float convertedLux = 0;
 
     TickType_t currentTick;
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
     currentTick = xTaskGetTickCount();
 
@@ -53,6 +54,11 @@ void AmbientLightSensor_Sample(void)
     if (sensorOpt3001Read(&rawData)) 
     {
         sensorOpt3001Convert(rawData, &convertedLux);
-        s_rawData.lux = (int32_t)convertedLux; 
+        SensorMsg_t msg = { .type = SENSOR_MSG_LIGHT, .value = (uint32_t)convertedLux };
+        if (rawdataQueue != NULL)
+        {
+            xQueueSendToBack(rawdataQueue, &msg, 0);
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        }
     }
 }

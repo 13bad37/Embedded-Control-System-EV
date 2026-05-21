@@ -28,11 +28,11 @@
 #define VL53L0X_ESTOP_DISTANCE_MM       300U
 #define VL53L0X_NOISE_FLOOR_MM          30U
 
-extern QueueHandle_t xSensorQueue;
 
-extern EvSensorDataRaw_t s_rawData;
 
 static TickType_t s_lastSampleTick;
+
+
 static bool     s_estopFired = false;
 
 
@@ -43,6 +43,7 @@ void Vl53l0xSensor_Init(void)
 
 void Vl53l0xSensor_Sample(void)
 {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     uint8_t   rxData[2] = {0};
     uint16_t  distanceMm;
     TickType_t currentTick = xTaskGetTickCount();
@@ -87,8 +88,11 @@ void Vl53l0xSensor_Sample(void)
             }
         }
 
+        SensorMsg_t msg = { .type = SENSOR_MSG_DISTANCE, .value = (uint32_t)distanceMm };
 
-        s_rawData.distanceMm = distanceMm;
+        xQueueSendToBack(rawdataQueue, &msg, 0);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        
 
 
         writeI2C_VL53L0X_Byte(VL53L0X_I2C_ADDRESS, VL53L0X_REG_INTERRUPT_CLEAR, VL53L0X_CLEAR_INTERRUPT);

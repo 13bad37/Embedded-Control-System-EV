@@ -31,6 +31,8 @@ MovingAverageFilter_t g_humidFilter;
 MovingAverageFilter_t g_speedFilter;
 MovingAverageFilter_t g_powerFilter;
 
+QueueHandle_t rawdataQueue = NULL;
+
 static void SensorPollingTask(void *pvParameters)
 {
     AmbientLightSensor_Init();
@@ -44,23 +46,47 @@ static void SensorPollingTask(void *pvParameters)
 
 void SensorManager_Init(void)
 {
+  
     xTaskCreate(SensorPollingTask, "SensorTask", 128, NULL, 2, NULL);
 }
 
 EvSensorDataRaw_t SensorManager_GetRawData(void)
 {
+    SensorMsg_t msg;
+    while (xQueueReceive(rawdataQueue, &msg, 0) == pdTRUE)
+    {
+        switch (msg.type)
+        {
+            case SENSOR_MSG_DISTANCE: s_rawData.distanceMm = msg.value; break;
+            case SENSOR_MSG_LIGHT: s_rawData.lux = msg.value; break;
+            case SENSOR_MSG_TEMP: s_rawData.temperatureC = msg.value; break;
+            case SENSOR_MSG_HUMID: s_rawData.humidityRh = msg.value; break;
+            case SENSOR_MSG_SPEED: s_rawData.motor_speed_rpm = msg.value; break;
+            case SENSOR_MSG_POWER: s_rawData.motor_power_w   = msg.value; break;
+        }
+    }
     return s_rawData;
 }
 
+static void updateFilter(void)
+{
+    
+        
+
+        s_filteredData.ambient_light_lux = Filter_ApplyMovingAverage(&g_lightFilter, s_rawData.lux);
+        s_filteredData.cabin_temperature_c_x10 = Filter_ApplyMovingAverage(&g_tempFilter,  s_rawData.temperatureC);
+        s_filteredData.cabin_humidity_rh_x10 = Filter_ApplyMovingAverage(&g_humidFilter, s_rawData.humidityRh);
+        s_filteredData.motor_speed_rpm = Filter_ApplyMovingAverage(&g_speedFilter, s_rawData.motor_speed_rpm);
+        s_filteredData.motor_power_w = Filter_ApplyMovingAverage(&g_powerFilter, s_rawData.motor_power_w);
+        s_filteredData.distance_mm = Vl53l0xSensor_UpdateFilter(s_rawData.distanceMm);
+    
+
+}
+
+
+
 EvSensorData_t SensorManager_GetFilteredData(void)
 {
-    s_filteredData.ambient_light_lux = Filter_ApplyMovingAverage(&g_lightFilter, s_rawData.lux);
-    s_filteredData.cabin_temperature_c_x10 = Filter_ApplyMovingAverage(&g_tempFilter,  s_rawData.temperatureC);
-    s_filteredData.cabin_humidity_rh_x10 = Filter_ApplyMovingAverage(&g_humidFilter, s_rawData.humidityRh);
-    s_filteredData.motor_speed_rpm = Filter_ApplyMovingAverage(&g_speedFilter, s_rawData.motor_speed_rpm);
-    s_filteredData.motor_power_w = Filter_ApplyMovingAverage(&g_powerFilter, s_rawData.motor_power_w);
-    s_filteredData.distance_mm = Vl53l0xSensor_UpdateFilter(s_rawData.distanceMm);
-
 
     return s_filteredData;
 }
@@ -108,7 +134,7 @@ void SensorManager_Poll(void)
     AmbientLightSensor_Sample();
     Sht31Sensor_Sample();
     Vl53l0xSensor_Sample();
-
+    updateFilter();
     //SensorManager_CheckThresholds();
     SensorDebug_Print();
 }

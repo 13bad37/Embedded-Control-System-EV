@@ -4,6 +4,7 @@
  
 #include "FreeRTOS.h"
 #include "task.h"
+#include "queue.h"
  
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
@@ -24,10 +25,11 @@
 
 extern EvSensorDataRaw_t s_rawData;
 
+uint32_t motor_power_w;
 void MotorPower_ADC_ISR(void)
 {
     uint32_t adcBuf[2];
- 
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
  
     
@@ -53,6 +55,11 @@ void MotorPower_ADC_ISR(void)
     float rawPower = POWER_SUPPLY_V * iTotal;
     
     
-    s_rawData.motor_power_w = rawPower;
+    s_rawData.motor_power_w = (uint32_t)rawPower;
+    // if (rawdataQueue != NULL)
+    // {
+    //     xQueueSendToBackFromISR(rawdataQueue, &motor_power_w, 0);
+    //     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    // }
 }
 

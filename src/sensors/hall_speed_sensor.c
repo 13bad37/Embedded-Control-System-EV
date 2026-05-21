@@ -17,17 +17,23 @@
 #include "app/GPIO_Init.h" 
 #include "app/hall_timer_init.h"
 
-#include "motor/motor_driver.h""
+#include "motor/motor_driver.h"
 #include "sensors/hall_speed_sensor.h"
 #include "sensors/sensor_manager.h"
-extern EvSensorDataRaw_t s_rawData;
+
+uint32_t motor_speed_rpm;
 
 void HallSpeedTimer_ISR(void)
 {
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
  
-    // Compute raw RPM
-    s_rawData.motor_speed_rpm = MotorDriver_GetRpm();
- 
+    //Compute raw RPM
+    motor_speed_rpm = MotorDriver_GetRpm();
+    SensorMsg_t msg = { .type = SENSOR_MSG_SPEED, .value = (uint32_t)motor_speed_rpm };
+
+    xQueueSendToBackFromISR(rawdataQueue, &msg, 0);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    
 }
 

@@ -19,10 +19,10 @@
 
 extern QueueHandle_t xSensorQueue;
 
-extern EvSensorDataRaw_t s_rawData;
-
 static TickType_t s_lastSampleTick;
 
+int32_t temperatureC;
+int32_t humidityRh;
 
 
 void Sht31Sensor_Init(void)
@@ -37,7 +37,7 @@ void Sht31Sensor_Sample(void)
     uint16_t rawHumid;
 
     TickType_t currentTick;
-
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
     currentTick = xTaskGetTickCount();
 
@@ -60,7 +60,16 @@ void Sht31Sensor_Sample(void)
         rawTemp  = ((uint16_t)rxData[0] << 8) | rxData[1];
         rawHumid = ((uint16_t)rxData[3] << 8) | rxData[4];
 
-        s_rawData.temperatureC = (int32_t)(-45.0f + (175.0f * ((float)rawTemp / 65535.0f)));
-        s_rawData.humidityRh = (int32_t)(100.0f * ((float)rawHumid / 65535.0f));
+        temperatureC = (int32_t)(-45.0f + (175.0f * ((float)rawTemp / 65535.0f)));
+        humidityRh = (int32_t)(100.0f * ((float)rawHumid / 65535.0f));
+        SensorMsg_t msg = { .type = SENSOR_MSG_TEMP, .value = (uint32_t)temperatureC };
+        SensorMsg_t msg2 = { .type = SENSOR_MSG_HUMID, .value = (uint32_t)humidityRh };
+
+        xQueueSendToBack(rawdataQueue, &msg, 0);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    
+        xQueueSendToBack(rawdataQueue, &msg2, 0);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        
     }
 }
