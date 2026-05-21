@@ -155,5 +155,5 @@ void SensorManager_Poll(void)
     Vl53l0xSensor_Sample();
 
     //SensorManager_CheckThresholds();
-    SensorDebug_Print();
+    // SensorDebug_Print();
 }

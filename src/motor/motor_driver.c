@@ -12,6 +12,7 @@
 #include "task.h"
 #include "utils/uartstdio.h"
 #include <stdbool.h>
+#include "motor/motor_control.h"
 
 extern uint32_t g_ui32SysClock;
 static void HallSensorHandler(void);
@@ -20,6 +21,7 @@ static volatile uint32_t s_hallEdgeCount     = 0U;
 static volatile uint32_t s_lastEdgeTimestamp = 0U;
 static volatile uint32_t s_edgePeriodTicks   = 0U;
 static volatile uint8_t  s_hallEdgeValid     = 0U;
+
 void MotorDriver_Init(void)
 {
     UARTprintf("SysClock value: %d\r\n", g_ui32SysClock);
@@ -27,7 +29,7 @@ void MotorDriver_Init(void)
     UARTprintf("initMotorLib starting\r\n");
     bool result = initMotorLib(PROJECT_MOTORLIB_PWM_PERIOD_US);
     UARTprintf("initMotorLib returned: %d\r\n", result);
-    initMotorLib(PROJECT_MOTORLIB_PWM_PERIOD_US);
+    /* REMOVED: duplicate initMotorLib call was here */
     UARTprintf("initMotorLib done\r\n");
 
     /* Hardware timer for hall edge timestamping */
@@ -76,11 +78,25 @@ void MotorDriver_Init(void)
 
 void MotorDriver_KickstartPlaceholder(void)
 {
-    uint32_t edgesBefore = MotorDriver_GetHallEdgeCount();
+    /* Reset edge count so we're counting fresh edges only */
+    s_hallEdgeCount     = 0U;
+    s_hallEdgeValid     = 0U;
+    s_edgePeriodTicks   = 0U;
+    s_lastEdgeTimestamp = 0U;
 
-    for (uint16_t duty = 10U; duty <= 45U; duty += 5U)
+    /* Wait 200ms — if motor is already spinning edges will accumulate */
+    vTaskDelay(pdMS_TO_TICKS(200));
+
+    if (s_hallEdgeCount > 2U)
     {
-        /* Refresh hall state at each step so MotorLib can commutate */
+        UARTprintf("Motor already spinning — skipping kickstart\r\n");
+        return;
+    }
+
+    uint32_t edgesBefore = s_hallEdgeCount;
+
+    for (uint16_t duty = 5U; duty <= 30U; duty += 2U)
+    {
         bool hall_a = (bool)(GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_3) & GPIO_PIN_3);
         bool hall_b = (bool)(GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_2) & GPIO_PIN_2);
         bool hall_c = (bool)(GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_2) & GPIO_PIN_2);
@@ -88,9 +104,7 @@ void MotorDriver_KickstartPlaceholder(void)
         updateMotor(hall_a, hall_b, hall_c);
         setDuty(duty);
 
-        UARTprintf("Kickstart: duty=%d hall A=%d B=%d C=%d\r\n",
-            duty, hall_a, hall_b, hall_c);
-
+        UARTprintf("Kickstart: duty=%d\r\n", duty);
         vTaskDelay(pdMS_TO_TICKS(150));
 
         if (MotorDriver_GetHallEdgeCount() > edgesBefore + 2U)
@@ -100,19 +114,17 @@ void MotorDriver_KickstartPlaceholder(void)
         }
     }
 
-    UARTprintf("WARNING: Motor did not start during kickstart\r\n");
+    UARTprintf("WARNING: kickstart complete\r\n");
 }
 
 void MotorDriver_EnableOutputs(void)
 {
     enableMotor();
-    /* TODO: call enableMotor() when hardware init is ready. */
 }
 
 void MotorDriver_DisableOutputs(void)
 {
     disableMotor();
-    /* TODO: disableMotor() */
 }
 
 void MotorDriver_SetPwmDuty(uint16_t duty_per_mille)
@@ -137,10 +149,9 @@ uint32_t MotorDriver_GetRpm(void)
         return 0U;
     }
 
-    /* If no edge for more than 200ms, motor has stopped */
     uint32_t now = TimerValueGet(TIMER1_BASE, TIMER_A);
     uint32_t timeSinceLastEdge = now - s_lastEdgeTimestamp;
-    if (timeSinceLastEdge > (g_ui32SysClock / 5U))  /* 200ms */
+    if (timeSinceLastEdge > (g_ui32SysClock / 5U))
     {
         return 0U;
     }
@@ -148,6 +159,14 @@ uint32_t MotorDriver_GetRpm(void)
     uint32_t rpm = (uint32_t)(((uint64_t)g_ui32SysClock * 60ULL) /
                    ((uint64_t)s_edgePeriodTicks * (PROJECT_MOTOR_POLE_PAIRS * 6U)));
     return rpm;
+}
+
+void MotorDriver_ResetHallState(void)
+{
+    s_hallEdgeCount     = 0U;
+    s_hallEdgeValid     = 0U;
+    s_edgePeriodTicks   = 0U;
+    s_lastEdgeTimestamp = 0U;
 }
 
 static void HallSensorHandler(void)
@@ -162,11 +181,17 @@ static void HallSensorHandler(void)
     s_hallEdgeValid = 1U;
     s_hallEdgeCount++;
 
-    bool hall_a = (bool)(GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_3) & GPIO_PIN_3);
-    bool hall_b = (bool)(GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_2) & GPIO_PIN_2);
-    bool hall_c = (bool)(GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_2) & GPIO_PIN_2);
-
-    MotorDriver_UpdateCommutationFromHall(hall_a, hall_b, hall_c);
+    /* Only commutate if motor is running or starting —
+       prevents MotorLib re-energising phases during braking */
+    EvMotorState_t state = MotorControl_GetState();
+    if (state == EV_MOTOR_STATE_RUNNING ||
+        state == EV_MOTOR_STATE_STARTING)
+    {
+        bool hall_a = (bool)(GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_3) & GPIO_PIN_3);
+        bool hall_b = (bool)(GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_2) & GPIO_PIN_2);
+        bool hall_c = (bool)(GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_2) & GPIO_PIN_2);
+        MotorDriver_UpdateCommutationFromHall(hall_a, hall_b, hall_c);
+    }
 
     GPIOIntClear(GPIO_PORTM_BASE, GPIO_INT_PIN_3);
     GPIOIntClear(GPIO_PORTH_BASE, GPIO_INT_PIN_2);
