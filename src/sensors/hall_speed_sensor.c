@@ -20,14 +20,14 @@
 #include "motor/motor_driver.h""
 #include "sensors/hall_speed_sensor.h"
 #include "sensors/sensor_manager.h"
-EvSensorDataRaw_t raw; 
+extern EvSensorDataRaw_t s_rawData;
 
 void HallSpeedTimer_ISR(void)
 {
     TimerIntClear(TIMER0_BASE, TIMER_TIMA_TIMEOUT);
  
     // Compute raw RPM
-    raw.motor_speed_rpm = MotorDriver_GetRpm();
+    s_rawData.motor_speed_rpm = MotorDriver_GetRpm();
  
 }
 
