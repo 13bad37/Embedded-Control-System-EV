@@ -1,4 +1,9 @@
+#pragma once
 #include "gui/gui_sensor_plot.h"
+#include "gui/gui_dashboard.h"
+#include "FreeRTOS.h"
+#include "task.h"
+
 
 void GuiSensorPlot_Init(void)
 {
@@ -6,7 +11,9 @@ void GuiSensorPlot_Init(void)
 }
 
 void GuiSensorPlot_Update(void)
-{
+{  
+    xTaskNotifyGive(xDisplayTaskHandle);
+    
     /* TODO: plot at least 5 seconds of motor/sensor history later. */
 }
 
