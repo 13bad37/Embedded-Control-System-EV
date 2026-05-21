@@ -1,12 +1,11 @@
 #include "motor/speed_controller.h"
 #include "common/project_config.h"
 
-/* Tuning parameters - adjust these during testing */
-#define PI_KP               0.02f
-#define PI_KI               0.01f
-#define PI_INTEGRAL_MAX     10.0f
-#define PI_INTEGRAL_MIN    -10.0f
-#define PI_OUTPUT_MAX       50U
+#define PI_KP               0.01f
+#define PI_KI               0.005f
+#define PI_INTEGRAL_MAX     3.0f
+#define PI_INTEGRAL_MIN    -3.0f
+#define PI_OUTPUT_MAX       30U     /* reduced from 50 — prevents overcurrent */
 #define PI_OUTPUT_MIN       0U
 
 typedef struct {
@@ -43,10 +42,20 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
     }
 
     float correction = (s_pi.kp * error) + (s_pi.ki * s_pi.integral);
-    float output = 25.0f + correction;   /* feedforward baseline */
+    float feedforward = (reference_rpm > 200U) ? 15.0f : 0.0f;
+    float output = feedforward + correction;
+
 
     if (output > (float)PI_OUTPUT_MAX) { output = (float)PI_OUTPUT_MAX; }
     if (output < (float)PI_OUTPUT_MIN) { output = (float)PI_OUTPUT_MIN; }
+
+    /* DEBUG */
+    /* Replace the UARTprintf debug line with this */
+    UARTprintf("PI: err=%d int=%d corr=%d out=%d\r\n",
+        (int)error,
+        (int)(s_pi.integral * 100),   /* multiply by 100 to see 2 decimal places */
+        (int)(correction * 100),
+        (int)output);
 
     return (uint16_t)output;
 }

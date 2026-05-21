@@ -1,6 +1,8 @@
 #include "motor/motor_state_machine.h"
 #include "motor/motor_driver.h"
+#include "utils/uartstdio.h"
 #include <stdbool.h>
+#include "motorlib.h"
 
 typedef struct {
     bool startRequested;
@@ -18,12 +20,15 @@ static EvFaultCode_t     s_latchedFault = EV_FAULT_NONE;
 
 static void EnterIdle(void)
 {
+    UARTprintf("State: IDLE\r\n");
     MotorDriver_DisableOutputs();
     s_motorState = EV_MOTOR_STATE_IDLE;
 }
 
 static void EnterStarting(void)
 {
+    UARTprintf("State: STARTING — EnterStarting called\r\n");
+    MotorDriver_ResetHallState();
     MotorDriver_EnableOutputs();
     MotorDriver_KickstartPlaceholder();
     s_inputs.hallFeedbackValid = false;
@@ -32,17 +37,20 @@ static void EnterStarting(void)
 
 static void EnterRunning(void)
 {
+    UARTprintf("State: RUNNING\r\n");
     s_motorState = EV_MOTOR_STATE_RUNNING;
 }
 
 static void EnterEStopBraking(EvFaultCode_t fault)
 {
+    UARTprintf("State: ESTOP_BRAKING fault=%d\r\n", fault);
     s_latchedFault = fault;
     s_motorState = EV_MOTOR_STATE_ESTOP_BRAKING;
 }
 
 static void EnterFaultLatched(void)
 {
+    UARTprintf("State: FAULT_LATCHED\r\n");
     MotorDriver_DisableOutputs();
     s_motorState = EV_MOTOR_STATE_FAULT_LATCHED;
 }
