@@ -15,50 +15,14 @@
 #include "driverlib/interrupt.h"
 #include "driverlib/pin_map.h"
  
+#include "sensors/sensor_manager.h"
 #include "sensors/motor_power_sensor.h"
 #include "app/adc_init.h"
 
 #include "motor/motor_state_machine.h"
 
 
-
-
-static volatile float s_rawPowerW = 0.0f;
- 
-// Moving average filter
-static float    s_filterBuf[POWER_FILTER_WINDOW];
-static int      s_filterIndex   = 0;
-static int      s_filterCount   = 0;
-static volatile float s_filteredPowerW = 0.0f;
-
-static volatile bool s_overcurrent = false;
-
-static float prvFilterUpdate(float newSample);
-
-void MotorPowerSensor_Init(void)
-{
-    memset(s_filterBuf, 0, sizeof(s_filterBuf));
-    s_filterIndex    = 0;
-    s_filterCount    = 0;
-    s_filteredPowerW = 0.0f;
-    s_rawPowerW      = 0.0f;
-    s_overcurrent    = false;
-
-}
-
-static float prvFilterUpdate(float newSample)
-{
-    s_filterBuf[s_filterIndex] = newSample;
-    s_filterIndex = (s_filterIndex + 1) % POWER_FILTER_WINDOW;
-    if (s_filterCount < POWER_FILTER_WINDOW) s_filterCount++;
- 
-    float sum = 0.0f;
-    for (int i = 0; i < s_filterCount; i++)
-    {
-        sum += s_filterBuf[i];
-    }
-    return sum / (float)s_filterCount;
-}
+EvSensorDataRaw_t raw;
 
 void MotorPower_ADC_ISR(void)
 {
@@ -89,37 +53,6 @@ void MotorPower_ADC_ISR(void)
     float rawPower = POWER_SUPPLY_V * iTotal;
     
     
-    s_rawPowerW = rawPower;
-
-    // Apply moving average filter
-    s_filteredPowerW = prvFilterUpdate(rawPower);
- 
-    // Check overcurrent threshold — flag for motor control to handle
-    if (s_filteredPowerW > 2000)             //need tuning
-    {
-
-        MotorStateMachine_RequestEStop(EV_FAULT_POWER_LIMIT);
-        return;
-        
-    }
+    raw.motor_power_w = rawPower;
 }
 
-float MotorPowerSensor_GetFilteredPowerW(void)
-{
-    return s_filteredPowerW;
-}
- 
-float MotorPowerSensor_GetRawPowerW(void)
-{
-    return s_rawPowerW;
-}
- 
-bool MotorPowerSensor_IsOvercurrent(void)
-{
-    if (s_overcurrent)
-    {
-        s_overcurrent = false;   // clear after read
-        return true;
-    }
-    return false;
-}

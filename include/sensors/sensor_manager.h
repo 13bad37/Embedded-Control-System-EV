@@ -14,6 +14,8 @@ typedef struct
     uint32_t motor_power_w;
 } EvSensorDataRaw_t;
 
+
+
 EvSensorDataRaw_t SensorManager_GetRawData(void);
 EvSensorData_t SensorManager_GetFilteredData(void);
 EvSensorThresholds_t SensorManager_CheckThresholds(void);

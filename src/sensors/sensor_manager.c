@@ -8,6 +8,7 @@
 
 #include "sensors/sensor_manager.h"
 
+#include "sensors/sensor_filter.h"
 #include "sensors/ambient_light_sensor.h"
 #include "sensors/hall_speed_sensor.h"
 #include "sensors/motor_power_sensor.h"
@@ -18,17 +19,21 @@
 #include "utils/uartstdio.h"
 
 #define EMERGENCY_DISTANCE_MM     300
+#define EMERGENCY_POWER_W 1800
 
+EvSensorDataRaw_t s_rawData;
+EvSensorData_t s_filteredData;
+EvSensorThresholds_t s_thresholds;
 
-static EvSensorDataRaw_t s_rawData;
-static EvSensorData_t s_filteredData;
-static EvSensorThresholds_t s_thresholds;
+MovingAverageFilter_t g_lightFilter;
+MovingAverageFilter_t g_tempFilter;
+MovingAverageFilter_t g_humidFilter;
+MovingAverageFilter_t g_speedFilter;
+MovingAverageFilter_t g_powerFilter;
 
 static void SensorPollingTask(void *pvParameters)
 {
     AmbientLightSensor_Init();
-    MotorPowerSensor_Init();
-    HallSpeedSensor_Init();
     Sht31Sensor_Init();
     Vl53l0xSensor_Init(); 
     //These inits must run after scheduler starts so a one shot task is created to do it once (deletes after one)
@@ -44,43 +49,20 @@ void SensorManager_Init(void)
 
 EvSensorDataRaw_t SensorManager_GetRawData(void)
 {
-    EvSensorDataRaw_t data;
-    int32_t rawLux;
-    int32_t rawTempC;
-    int32_t rawHumidPct;
-    uint16_t rawDistanceMm;
-
-    data = s_rawData;
-    if (AmbientLightSensor_GetRawLux(&rawLux)){data.lux = rawLux;}
-    if (Sht31Sensor_GetRawTemperatureC(&rawTempC)){data.temperatureC = rawTempC;}
-    if (Sht31Sensor_GetRawHumidityPct(&rawHumidPct)){data.humidityRh = rawHumidPct;}
-    if (Vl53l0xSensor_GetRawDistanceMm(&rawDistanceMm)){data.distanceMm = rawDistanceMm;}
-    data.motor_speed_rpm = (int32_t)HallSpeedSensor_GetRawRPM();
-    //data.motor_power_w = (uint32_t)MotorPowerSensor_GetRawPowerW();
-
-    s_rawData = data;
-    return data;
+    return s_rawData;
 }
 
 EvSensorData_t SensorManager_GetFilteredData(void)
 {
-    EvSensorData_t data;
-    int32_t filteredLux;
-    int32_t filteredTempC;
-    int32_t filteredHumidPct;
-    uint16_t filteredDistanceMm;
+    s_filteredData.ambient_light_lux = Filter_ApplyMovingAverage(&g_lightFilter, s_rawData.lux);
+    s_filteredData.cabin_temperature_c_x10 = Filter_ApplyMovingAverage(&g_tempFilter,  s_rawData.temperatureC);
+    s_filteredData.cabin_humidity_rh_x10 = Filter_ApplyMovingAverage(&g_humidFilter, s_rawData.humidityRh);
+    s_filteredData.motor_speed_rpm = Filter_ApplyMovingAverage(&g_speedFilter, s_rawData.motor_speed_rpm);
+    s_filteredData.motor_power_w = Filter_ApplyMovingAverage(&g_powerFilter, s_rawData.motor_power_w);
+    s_filteredData.distance_mm = Vl53l0xSensor_UpdateFilter(s_rawData.distanceMm);
 
-    data = s_filteredData;
 
-    if (AmbientLightSensor_GetFilteredLux(&filteredLux)){data.ambient_light_lux = filteredLux;}
-    if (Sht31Sensor_GetFilteredTemperatureC(&filteredTempC)){data.cabin_temperature_c_x10 = filteredTempC;}
-    if (Sht31Sensor_GetFilteredHumidityPct(&filteredHumidPct)){data.cabin_humidity_rh_x10 = filteredHumidPct;}
-    if (Vl53l0xSensor_GetFilteredDistanceMm(&filteredDistanceMm)){data.distance_mm = filteredDistanceMm;}
-    data.motor_speed_rpm = (int32_t)HallSpeedSensor_GetRPM();
-    //data.motor_power_w = (uint32_t)MotorPowerSensor_GetFilteredPowerW();
-    s_filteredData = data;
-
-    return data;
+    return s_filteredData;
 }
 
 EvSensorThresholds_t SensorManager_GetThresholds(void)
@@ -90,62 +72,35 @@ EvSensorThresholds_t SensorManager_GetThresholds(void)
 
 EvSensorThresholds_t SensorManager_CheckThresholds(void)
 {
-    uint16_t filteredDist;
 
-
-    if (Vl53l0xSensor_GetFilteredDistanceMm(&filteredDist))
+    if (s_filteredData.distance_mm < EMERGENCY_DISTANCE_MM)
     {
-        if (filteredDist < EMERGENCY_DISTANCE_MM)
-        {
-            //FaultManager_TriggerEStop();
-            //UARTprintf("EmergencySTOP");
-        }
+        //FaultManager_TriggerEStop();
+        //UARTprintf("EmergencySTOP");
     }
-
-    // if (MotorPowerSensor_IsOvercurrent())
-    // {
-    //     FaultManager_TriggerEStop();
-    // }
+    
+    if (s_filteredData.motor_power_w > EMERGENCY_POWER_W)
+    {
+        //FaultManager_TriggerEStop();
+    }
 }
 
 static void SensorDebug_Print(void)
 {
-    int32_t rawLux;
-    int32_t filteredLux;
-    int32_t rawTempC;
-    int32_t filteredTempC;
-    int32_t rawHumidPct;
-    int32_t filteredHumidPct;
-    uint16_t rawDistanceMm;
-    uint16_t filteredDistanceMm;
-    int rawRpm = HallSpeedSensor_GetRawRPM();
-    int filteredRpm = HallSpeedSensor_GetRPM();
-    int rawPower = MotorPowerSensor_GetRawPowerW();
-    int filteredPower = MotorPowerSensor_GetFilteredPowerW();
 
-    if (AmbientLightSensor_GetRawLux(&rawLux) &&
-        AmbientLightSensor_GetFilteredLux(&filteredLux) &&
-        Sht31Sensor_GetRawTemperatureC(&rawTempC) &&
-        Sht31Sensor_GetFilteredTemperatureC(&filteredTempC) &&
-        Sht31Sensor_GetRawHumidityPct(&rawHumidPct) &&
-        Sht31Sensor_GetFilteredHumidityPct(&filteredHumidPct) &&
-        Vl53l0xSensor_GetRawDistanceMm(&rawDistanceMm) &&
-        Vl53l0xSensor_GetFilteredDistanceMm(&filteredDistanceMm))
-    {
-        UARTprintf("RawLux:%d FilteredLux:%d RawTempC:%d FilteredTempC:%d RawHumidPct:%d FilteredHumidPct:%d RawDistanceMm:%d FilteredDistanceMm:%d, RawRpm:%d FilteredRpm:%d, rawPower:%d, FilteredPower:%d\n",
-                   rawLux,
-                   filteredLux,
-                   rawTempC,
-                   filteredTempC,
-                   rawHumidPct,
-                   filteredHumidPct,
-                   rawDistanceMm,
-                   filteredDistanceMm,
-                   rawRpm,
-                   filteredRpm,
-                   rawPower,
-                   filteredPower);
-    }
+    UARTprintf("RawLux:%d FilteredLux:%d RawTempC:%d FilteredTempC:%d RawHumidPct:%d FilteredHumidPct:%d RawDistanceMm:%d FilteredDistanceMm:%d, RawRpm:%d FilteredRpm:%d, rawPower:%d, FilteredPower:%d\n",
+                s_rawData.lux,
+                s_filteredData.ambient_light_lux,
+                s_rawData.temperatureC,
+                s_filteredData.cabin_temperature_c_x10,
+                s_rawData.humidityRh,
+                s_filteredData.cabin_humidity_rh_x10,
+                s_rawData.distanceMm,
+                s_filteredData.distance_mm,
+                s_rawData.motor_speed_rpm,
+                s_filteredData.motor_speed_rpm,
+                s_rawData.motor_power_w,
+                s_filteredData.motor_power_w);
 }
 
 void SensorManager_Poll(void)
@@ -157,3 +112,5 @@ void SensorManager_Poll(void)
     //SensorManager_CheckThresholds();
     SensorDebug_Print();
 }
+
+
