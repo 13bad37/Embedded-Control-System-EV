@@ -22,7 +22,7 @@
 #include "motor/motor_state_machine.h"
 
 
-EvSensorDataRaw_t raw;
+extern EvSensorDataRaw_t s_rawData;
 
 void MotorPower_ADC_ISR(void)
 {
@@ -53,6 +53,6 @@ void MotorPower_ADC_ISR(void)
     float rawPower = POWER_SUPPLY_V * iTotal;
     
     
-    raw.motor_power_w = rawPower;
+    s_rawData.motor_power_w = rawPower;
 }
 

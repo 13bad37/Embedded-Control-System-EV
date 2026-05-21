@@ -30,7 +30,8 @@
 
 extern QueueHandle_t xSensorQueue;
 
-EvSensorDataRaw_t raw;
+extern EvSensorDataRaw_t s_rawData;
+
 static TickType_t s_lastSampleTick;
 static bool     s_estopFired = false;
 
@@ -87,7 +88,7 @@ void Vl53l0xSensor_Sample(void)
         }
 
 
-        raw.distanceMm = distanceMm;
+        s_rawData.distanceMm = distanceMm;
 
 
         writeI2C_VL53L0X_Byte(VL53L0X_I2C_ADDRESS, VL53L0X_REG_INTERRUPT_CLEAR, VL53L0X_CLEAR_INTERRUPT);

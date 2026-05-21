@@ -19,7 +19,7 @@
 
 extern QueueHandle_t xSensorQueue;
 
-EvSensorDataRaw_t raw;
+extern EvSensorDataRaw_t s_rawData;
 
 static TickType_t s_lastSampleTick;
 
@@ -60,7 +60,7 @@ void Sht31Sensor_Sample(void)
         rawTemp  = ((uint16_t)rxData[0] << 8) | rxData[1];
         rawHumid = ((uint16_t)rxData[3] << 8) | rxData[4];
 
-        raw.temperatureC = (int32_t)(-45.0f + (175.0f * ((float)rawTemp / 65535.0f)));
-        raw.humidityRh = (int32_t)(100.0f * ((float)rawHumid / 65535.0f));
+        s_rawData.temperatureC = (int32_t)(-45.0f + (175.0f * ((float)rawTemp / 65535.0f)));
+        s_rawData.humidityRh = (int32_t)(100.0f * ((float)rawHumid / 65535.0f));
     }
 }
