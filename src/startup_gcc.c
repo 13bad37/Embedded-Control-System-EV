@@ -46,6 +46,7 @@ extern void vPortSVCHandler(void);
 extern void xPortSysTickHandler(void);
 extern void I2C2_Handler(void);
 extern void MotorPower_ADC_ISR(void);
+extern void TouchScreenIntHandler(void);
 
 
 //*****************************************************************************
@@ -105,7 +106,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // ADC Sequence 0
     IntDefaultHandler,                      // ADC Sequence 1
     MotorPower_ADC_ISR,                      // ADC Sequence 2
-    IntDefaultHandler,                      // ADC Sequence 3
+    TouchScreenIntHandler,                      // ADC Sequence 3
     IntDefaultHandler,                      // Watchdog timer
     IntDefaultHandler,                      // Timer 0 subtimer A
     IntDefaultHandler,                      // Timer 0 subtimer B
