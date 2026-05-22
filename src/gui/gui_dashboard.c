@@ -45,6 +45,7 @@
 
 tContext sContext;
 uint32_t g_ui32Panel;
+uint32_t g_ui32LastPanel;
 TaskHandle_t xDisplayTaskHandle = NULL; 
 #define PLOT_SIZE 200
 uint32_t graphX = 1;
@@ -54,8 +55,11 @@ bool plotToggle = false;
 bool faultLatched = false;
 uint32_t g_thresholds[6];
 uint32_t g_temp_thresholds[6];
+uint32_t g_max_values[6] = {500, 500, 1000, 50, 100, 500};
 volatile uint32_t g_elapsed_ticks = 405000;
 char clockBuf[20];
+char plotBuf[20];
+char configBuf[20];
 
 static void prvGUITask( void *pvParameters );
 void OnPrevious(tWidget *psWidget);
@@ -67,13 +71,17 @@ void OnConfigurationPaint(tWidget *psWidget, tContext *psContext);
 void OnStartStopButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 void UpdateBanner();
+void ClockUpdate();
 void OnSensorButtonPress(tWidget *psWidget);
 void OnFaultAcknowledgeButtonPress(tWidget *psWidget);
 void OnConfigButtonPress(tWidget *psWidget);
 extern tCanvasWidget g_psPanels[];
 uint32_t g_ui32CurrentPlot = 10;
 uint32_t g_ui32CurrentConfig = 0;
+uint32_t g_ui32LastConfig = 0;
+EvMotorState_t g_currentState = EV_MOTOR_STATE_IDLE;
 EvMotorState_t g_lastState = EV_MOTOR_STATE_IDLE;
+bool updateConfigRequest = false;
 
 //for testing
 enum MotorStates {
@@ -107,10 +115,10 @@ Canvas(g_sIntroduction, g_psPanels, g_psStartStopButton, 0, &g_sKentec320x240x16
 
 tPushButtonWidget g_psClock[] = {
     RectangularButtonStruct(g_psPanels + 1, 0, 0,
-                        &g_sKentec320x240x16_SSD2119, 0, 60, 120, 40,
+                        &g_sKentec320x240x16_SSD2119, 0, 220, 120, 20,
                         PB_STYLE_FILL | PB_STYLE_TEXT,
                         0, 0, 0, ClrWhite,
-                        &g_sFontCm22, "11:15:00", 0, 0, 0, 0, 0),
+                        &g_sFontCm18, "27/05/26 11:15:00", 0, 0, 0, 0, 0),
 };
 
 tSliderWidget g_psSliders[] = {
@@ -120,7 +128,7 @@ tSliderWidget g_psSliders[] = {
                   SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "250", 0, 0, OnSliderChange),
-    SliderStruct(g_psPanels + 1, g_psClock, 0,
+    SliderStruct(g_psPanels + 1, 0, 0,
                  &g_sKentec320x240x16_SSD2119, 150, 150, 140, 30, 0, 1000, 250,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                   SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
@@ -139,12 +147,12 @@ tPushButtonWidget g_psConfigButtons[] = {
                             &g_sKentec320x240x16_SSD2119, 107, 23, 107, 33,
                             PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
                             ClrMidnightBlue, ClrMidnightBlue, ClrWhite, ClrSilver,
-                            &g_sFontFixed6x8, "Distance", 0, 0, 0, 0, OnConfigButtonPress),
+                            &g_sFontFixed6x8, "VL53L0X", 0, 0, 0, 0, OnConfigButtonPress),
     RectangularButtonStruct(g_psPanels + 1, g_psSliders, 0,
                             &g_sKentec320x240x16_SSD2119, 213, 23, 107, 33,
                             PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
                             ClrMidnightBlue, ClrMidnightBlue, ClrWhite, ClrSilver,
-                            &g_sFontFixed6x8, "Temperature", 0, 0, 0, 0, OnConfigButtonPress),
+                            &g_sFontFixed6x8, "SHT31", 0, 0, 0, 0, OnConfigButtonPress),
 };
 #define NUM_CONFIG_BUTTONS (sizeof(g_psConfigButtons) / sizeof(g_psConfigButtons[0]))
 
@@ -212,7 +220,7 @@ char *g_pcPanei32Names[] =
 };
 
 RectangularButton(g_sPrevious, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 0, 190,
-                  50, 50, PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY, ClrBlack, ClrBlack, 0, ClrSilver,
+                  50, 50, PB_STYLE_IMG | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY, ClrBlack, ClrBlack, 0, ClrSilver,
                   &g_sFontCm20, "-", g_pui8Blue50x50, g_pui8Blue50x50Press, 0, 0,
                   OnPrevious);
 RectangularButton(g_sNext, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 270, 190,
@@ -230,7 +238,7 @@ void OnPrevious(tWidget *psWidget) {
     g_ui32Panel--;
     WidgetAdd(WIDGET_ROOT, (tWidget *)(g_psPanels + g_ui32Panel));
     WidgetPaint((tWidget *)(g_psPanels + g_ui32Panel));
-    UpdateBanner();
+    // UpdateBanner();
 
     if(g_ui32Panel == 0)
     {
@@ -258,7 +266,7 @@ void OnNext(tWidget *psWidget) {
     g_ui32Panel++;
     WidgetAdd(WIDGET_ROOT, (tWidget *)(g_psPanels + g_ui32Panel));
     WidgetPaint((tWidget *)(g_psPanels + g_ui32Panel));
-    UpdateBanner();
+    // UpdateBanner();
 
     if(g_ui32Panel == 1) {
         PushButtonImageOn(&g_sPrevious);
@@ -284,24 +292,92 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext) {
         GrStringDrawCentered(psContext, "An Emergency Stop Has Been Triggered.", -1, 160, 32, 0);
         GrStringDrawCentered(psContext, "You must acknowledge the fault before", -1, 160, 55, 0);
         GrStringDrawCentered(psContext, "starting the motor.", -1, 160, 75, 0);
+        return;
     }
+    ClockUpdate();
+
 }
 
-void OnSensorPlotsPaint(tWidget *psWidget, tContext *psContext) {
-    GrContextFontSet(psContext, &g_sFontCm16);
-    GrContextForegroundSet(psContext, ClrSilver);
-    GrStringDrawCentered(psContext, "500", -1, 270, 62, 0);
-    GrStringDrawCentered(psContext, "0", -1, 265, 200, 0);
-    GrStringDrawCentered(psContext, "0s", -1, 60, 210, 0);
-    GrStringDrawCentered(psContext, "10s", -1, 260, 210, 0);
+void UpdatePlotAxes() {
+    if(g_ui32CurrentPlot >= NUM_PLOT_BUTTONS) return;
+    usprintf(plotBuf, "%d", g_max_values[g_ui32CurrentPlot]);
+    GrContextFontSet(&sContext, &g_sFontCm16);    
+    tRectangle limitRect = {260, 58, 320, 72};
+    GrContextForegroundSet(&sContext, ClrBlack);
+    GrRectFill(&sContext, &limitRect);
+    GrContextForegroundSet(&sContext, ClrSilver);
+    GrStringDrawCentered(&sContext, plotBuf, -1, 273, 62, 0);
+    GrStringDrawCentered(&sContext, "0", -1, 265, 200, 0);
+    GrStringDrawCentered(&sContext, "0s", -1, 60, 210, 0);
+    GrStringDrawCentered(&sContext, "10s", -1, 260, 210, 0);
     graphX = 1;
     tRectangle clearRect = {61, 63, 258, 200};
     GrContextForegroundSet(&sContext, ClrBlack);
     GrRectFill(&sContext, &clearRect);
 }
 
-void OnConfigurationPaint(tWidget *psWidget, tContext *psContext) {
+void OnSensorPlotsPaint(tWidget *psWidget, tContext *psContext) {
+    UpdatePlotAxes();
+}
 
+void UpdateConfigPage() {
+    if(g_ui32Panel != 1) return;
+    EvSensorData_t sensorData = SensorManager_GetFilteredData();
+    GrContextFontSet(&sContext, &g_sFontCm16);
+    if(g_ui32LastConfig != g_ui32CurrentConfig) {
+        tRectangle configClearRect = {0, 58, 250, 100};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &configClearRect);
+    }   
+
+    // SensorManager_SetThresholds();
+    if(g_ui32CurrentConfig == 0) {
+        if(g_ui32LastConfig != 0) {
+            GrContextForegroundSet(&sContext, ClrWhite);
+            GrStringDraw(&sContext, "Motor Speed: ", -1, 5, 62, 0);
+            g_ui32LastConfig = g_ui32CurrentConfig;
+        }
+        tRectangle configClearRect1 = {100, 62, 160, 78};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &configClearRect1);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        usprintf(configBuf, "%drpm", sensorData.motor_speed_rpm);
+        GrStringDraw(&sContext, configBuf, -1, 100, 62, 0);
+
+    } else if(g_ui32CurrentConfig == 1) {
+        if(g_ui32LastConfig != 1) {
+            GrContextForegroundSet(&sContext, ClrWhite);
+            GrStringDraw(&sContext, "Nearest Object: ", -1, 5, 62, 0);
+            g_ui32LastConfig = g_ui32CurrentConfig;
+        }
+        tRectangle configClearRect1 = {110, 62, 165, 75};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &configClearRect1);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        usprintf(configBuf, "%dmm", sensorData.distance_mm);
+        GrStringDraw(&sContext, configBuf, -1, 115, 62, 0);
+    } else if(g_ui32CurrentConfig == 2) {
+        if(g_ui32LastConfig != 2) {
+            GrContextForegroundSet(&sContext, ClrWhite);
+            GrStringDraw(&sContext, "Current Temperature: ", -1, 5, 62, 0);
+            GrStringDraw(&sContext, "Relative Humidity: ", -1, 5, 77, 0);
+            g_ui32LastConfig = g_ui32CurrentConfig;
+        }
+        tRectangle configClearRect1 = {160, 62, 180, 75};
+        tRectangle configClearRect2 = {140, 77, 160, 90};
+        GrContextForegroundSet(&sContext, ClrBlack);
+        GrRectFill(&sContext, &configClearRect1);
+        GrRectFill(&sContext, &configClearRect2);
+        GrContextForegroundSet(&sContext, ClrWhite);
+        usprintf(configBuf, "%dC", sensorData.cabin_temperature_c_x10);
+        GrStringDraw(&sContext, configBuf, -1, 160, 62, 0);
+        usprintf(configBuf, "%d%%", sensorData.cabin_humidity_rh_x10);
+        GrStringDraw(&sContext, configBuf, -1, 140, 77, 0);
+    }
+}
+
+void OnConfigurationPaint(tWidget *psWidget, tContext *psContext) {
+    // UpdateConfigPage();
 }
 
 void OnConfigButtonPress(tWidget *psWidget) {
@@ -390,7 +466,7 @@ void OnCanvasPaint(tWidget *psWidget, tContext *psContext) {
 
     // define and draw the scale
     uint32_t xMax = PLOT_SIZE;
-    uint32_t yMax = 500;
+    uint32_t yMax = g_max_values[g_ui32CurrentPlot];
     uint32_t canvas_xMin = 60;
     uint32_t canvas_xRange = 200;
     uint32_t canvas_yMin = 62;
@@ -439,7 +515,7 @@ void OnStartStopButtonPress(tWidget *psWidget) {
     }
     WidgetPaint((tWidget *)&g_psStartStopButton);
 
-    UpdateBanner();    
+    // UpdateBanner();    
 }
 
 void OnSensorButtonPress(tWidget *psWidget) {
@@ -466,13 +542,15 @@ void OnSensorButtonPress(tWidget *psWidget) {
 
     if(g_ui32CurrentPlot == ui32Idx && plotToggle) {
         plotToggle = !plotToggle;
-        return;
+        // return;
+    } else {
+        PushButtonFillColorSet((tPushButtonWidget *)(g_psPlotButtons + ui32Idx), ClrAqua);
+        WidgetPaint((tWidget *)(g_psPlotButtons + ui32Idx));
+        plotToggle = true;
     }
-    PushButtonFillColorSet((tPushButtonWidget *)(g_psPlotButtons + ui32Idx), ClrAqua);
-    WidgetPaint((tWidget *)(g_psPlotButtons + ui32Idx));
-    plotToggle = true;
 
     g_ui32CurrentPlot = ui32Idx;
+    UpdatePlotAxes();
 }
 
 void UpdateBanner() {
@@ -522,25 +600,27 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value) {
             break;
         }
     }
-    g_thresholds[ui32Idx] = i32Value;
+    g_temp_thresholds[ui32Idx] = i32Value;
     usprintf(pcSliderText, "%3d", i32Value);
     SliderTextSet(psWidget, pcSliderText);
     WidgetPaint(psWidget);
 }
 
 void ClockUpdate() {
-    if (MotorState == ESTOP || g_ui32Panel != 1) return;
+    EvMotorState_t motorState = MotorControl_GetState();
+    if (motorState == EV_MOTOR_STATE_ESTOP_BRAKING || motorState == EV_MOTOR_STATE_FAULT_LATCHED || g_ui32Panel != 0) return;
     int32_t seconds = (g_elapsed_ticks / 10) % 60;
     int32_t minutes = (g_elapsed_ticks / 600) % 60;
     int32_t hours = (g_elapsed_ticks / 36000) % 12;
-    usprintf(clockBuf, "%02d:%02d:%02d", hours, minutes, seconds);
-    PushButtonTextSet(&g_psClock, clockBuf);
+    usprintf(clockBuf, "27/05/26 %02d:%02d:%02d", hours, minutes, seconds);
+    PushButtonTextSet((tPushButtonWidget *)&g_psClock, clockBuf);
     WidgetPaint((tWidget *)&g_psClock);
+
 }
 
 void vClockTimerCallback(TimerHandle_t xTimer) {
     g_elapsed_ticks++;
-    if(g_elapsed_ticks % 10 == 9) {
+    if(g_elapsed_ticks % 10 == 0) {
         ClockUpdate();
     }
 }
@@ -562,6 +642,9 @@ static void prvGUITask( void *pvParameters ) {
     g_ui32Panel = 0;
     WidgetAdd(WIDGET_ROOT, (tWidget *)g_psPanels);
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sPrevious);
+    PushButtonImageOff(&g_sPrevious);
+    PushButtonTextOff(&g_sPrevious);
+    PushButtonFillOn(&g_sPrevious);
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sNext);
     WidgetPaint(WIDGET_ROOT);
     UpdateBanner();
@@ -573,12 +656,36 @@ static void prvGUITask( void *pvParameters ) {
                 WidgetPaint((tWidget *)&g_sCanvas3);
             }            
         }
-        EvMotorState_t motorState = MotorControl_GetState();
-        if(motorState != EV_MOTOR_STATE_ESTOP_BRAKING) {
-            WidgetMessageQueueProcess();
-        } else {
+        if(g_currentState != g_lastState) {
             UpdateBanner();
+            g_lastState = g_currentState;
         }
+
+        if(g_ui32Panel != g_ui32LastPanel) {
+            UpdateBanner();
+            g_ui32LastPanel = g_ui32Panel;
+            g_ui32LastConfig = 3;
+        }
+
+        if(!faultLatched && g_currentState == EV_MOTOR_STATE_FAULT_LATCHED) {
+            OnFaultLatched();
+        }
+
+        if(updateConfigRequest) {
+            UpdateConfigPage();
+            updateConfigRequest = false;
+        }
+
+
+        // EvMotorState_t motorState = MotorControl_GetState();
+        // if(motorState != EV_MOTOR_STATE_ESTOP_BRAKING) {
+        WidgetMessageQueueProcess();
+        // } else {
+        //     UpdateBanner();
+        // }
+        // if(motorState == EV_MOTOR_STATE_ESTOP_BRAKING) {
+        //     UpdateBanner();
+        // }
 
         // vTaskDelay(10);
     }
@@ -592,7 +699,6 @@ void GuiDashboard_Init(void) {
                  tskIDLE_PRIORITY + 1,
                  &xDisplayTaskHandle );
 
-    // for testing without sensor data
     TimerHandle_t xClockTimer;
     xClockTimer = xTimerCreate(
         "PlotTimer",
@@ -607,15 +713,22 @@ void GuiDashboard_Init(void) {
 void GuiDashboard_Update(void)
 {
     EvMotorState_t motorState = MotorControl_GetState();
+    g_currentState = motorState;
 
-    if(motorState != g_lastState) {
-        UpdateBanner();
-        g_lastState = motorState;
-    }
+    // if(g_currentState != g_lastState) {
+    //     UpdateBanner();
+    //     g_lastState = motorState;
+    // }
+    // if(g_ui32Panel != g_ui32LastPanel) {
+    //     UpdateBanner();
+    //     g_ui32LastPanel = g_ui32Panel;
+    // }
 
-    if(!faultLatched && motorState == EV_MOTOR_STATE_FAULT_LATCHED) {
-        OnFaultLatched();
-    }
+    // if(!faultLatched && g_currentState == EV_MOTOR_STATE_FAULT_LATCHED) {
+    //     OnFaultLatched();
+    // }
+
+    if(g_ui32Panel == 1) updateConfigRequest = true;
     /* TODO: show motor state, faults, speed input, thresholds etc */
 }
 
