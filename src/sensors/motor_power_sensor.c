@@ -34,7 +34,7 @@ void MotorPower_ADC_ISR(void)
     ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples 
     
 
-    //s_rawData.motor_power_w = (uint32_t)rawPower;
+    
     // SensorMsg_t msg = { .type = SENSOR_MSG_POWERA, .value = (uint32_t)adcBuf[0] };
     // if (rawdataQueue != NULL)
     // {
