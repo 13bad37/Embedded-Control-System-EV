@@ -23,7 +23,7 @@
 #include "motor/motor_state_machine.h"
 
 
-extern EvSensorDataRaw_t s_rawData;
+//extern EvSensorDataRaw_t s_rawData;
 
 uint32_t motor_power_w;
 void MotorPower_ADC_ISR(void)
@@ -31,35 +31,27 @@ void MotorPower_ADC_ISR(void)
     uint32_t adcBuf[2];
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
- 
-    
     ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples 
     
-    int32_t rawA = (int32_t)adcBuf[0] - 200;
-    int32_t rawB = (int32_t)adcBuf[1] - 200; //idle offset 
-   
-    float vA = ((float)rawA / POWER_ADC_RESOLUTION) * POWER_VREF_V;
-    float vB = ((float)rawB / POWER_ADC_RESOLUTION) * POWER_VREF_V; //convert to voltage 
- 
-    // Convert voltage to phase current (DRV8323 section 8.3.4.1)
-    float iA = vA / (POWER_CSA_GAIN * POWER_SHUNT_OHM);
-    float iB = vB / (POWER_CSA_GAIN * POWER_SHUNT_OHM);
-    
 
-    //float iTotal_limit = (motor_phase_currrent_limit_A + motor_phase_currrent_limit_B) + (motor_phase_currrent_limit_A + motor_phase_currrent_limit_B)/2;
-
-    // Estimate total three-phase current from two measured phases
-    float iTotal = (iA + iB) + (iA + iB)/2 ;
- 
-    // Compute raw power
-    float rawPower = POWER_SUPPLY_V * iTotal;
-    
-    
-    s_rawData.motor_power_w = (uint32_t)rawPower;
+    //s_rawData.motor_power_w = (uint32_t)rawPower;
+    // SensorMsg_t msg = { .type = SENSOR_MSG_POWERA, .value = (uint32_t)adcBuf[0] };
     // if (rawdataQueue != NULL)
     // {
-    //     xQueueSendToBackFromISR(rawdataQueue, &motor_power_w, 0);
+    //     xQueueSendToBack(rawdataQueue, &msg, 0);
     //     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     // }
+    // SensorMsg_t msg = { .type = SENSOR_MSG_POWERB, .value = (uint32_t)adcBuf[1] };
+    // if (rawdataQueue != NULL)
+    // {
+    //     xQueueSendToBack(rawdataQueue, &msg, 0);
+    //     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    // }
+
 }
 
+
+
+    
+    
+    

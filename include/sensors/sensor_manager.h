@@ -22,7 +22,8 @@ typedef enum {
     SENSOR_MSG_TEMP,
     SENSOR_MSG_HUMID,
     SENSOR_MSG_DISTANCE,
-    SENSOR_MSG_POWER,
+    SENSOR_MSG_POWERA,
+    SENSOR_MSG_POWERB
 } SensorMsgType_t;
 
 typedef struct {
