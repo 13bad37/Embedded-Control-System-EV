@@ -53,6 +53,7 @@ uint32_t lastGraphY[6];
 bool plotToggle = false;
 bool faultLatched = false;
 uint32_t g_thresholds[6];
+uint32_t g_temp_thresholds[6];
 volatile uint32_t g_elapsed_ticks = 405000;
 char clockBuf[20];
 
@@ -62,12 +63,17 @@ void OnNext(tWidget *psWidget);
 void OnIntroPaint(tWidget *psWidget, tContext *psContext);
 void OnCanvasPaint(tWidget *psWidget, tContext *psContext);
 void OnSensorPlotsPaint(tWidget *psWidget, tContext *psContext);
+void OnConfigurationPaint(tWidget *psWidget, tContext *psContext);
 void OnStartStopButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 void UpdateBanner();
 void OnSensorButtonPress(tWidget *psWidget);
 void OnFaultAcknowledgeButtonPress(tWidget *psWidget);
+void OnConfigButtonPress(tWidget *psWidget);
 extern tCanvasWidget g_psPanels[];
+uint32_t g_ui32CurrentPlot = 10;
+uint32_t g_ui32CurrentConfig = 0;
+EvMotorState_t g_lastState = EV_MOTOR_STATE_IDLE;
 
 //for testing
 enum MotorStates {
@@ -83,7 +89,7 @@ tPushButtonWidget g_psFaultAcknowledgeButton[] =
 {
     RectangularButtonStruct(g_psPanels, 0, 0,
                             &g_sKentec320x240x16_SSD2119, 60, 100, 200, 40,
-                            PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT,
+                            PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
                             ClrYellow, ClrYellow, 0, ClrBlack,
                             &g_sFontCm22, "ACKNOWLEDGE", 0, 0, 0, 0, OnFaultAcknowledgeButtonPress),
 };
@@ -91,7 +97,7 @@ tPushButtonWidget g_psFaultAcknowledgeButton[] =
 tPushButtonWidget g_psStartStopButton[] = {
     RectangularButtonStruct(g_psPanels, 0, 0,
                             &g_sKentec320x240x16_SSD2119, 90, 100, 140, 40,
-                            PB_STYLE_FILL | PB_STYLE_TEXT,
+                            PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
                             ClrLightGreen, 0, 0, ClrBlack,
                             &g_sFontCm22, "Start Motor", 0, 0, 0, 0, OnStartStopButtonPress),
 };
@@ -101,7 +107,7 @@ Canvas(g_sIntroduction, g_psPanels, g_psStartStopButton, 0, &g_sKentec320x240x16
 
 tPushButtonWidget g_psClock[] = {
     RectangularButtonStruct(g_psPanels + 1, 0, 0,
-                        &g_sKentec320x240x16_SSD2119, 0, 30, 120, 40,
+                        &g_sKentec320x240x16_SSD2119, 0, 60, 120, 40,
                         PB_STYLE_FILL | PB_STYLE_TEXT,
                         0, 0, 0, ClrWhite,
                         &g_sFontCm22, "11:15:00", 0, 0, 0, 0, 0),
@@ -109,24 +115,6 @@ tPushButtonWidget g_psClock[] = {
 
 tSliderWidget g_psSliders[] = {
     SliderStruct(g_psPanels + 1, g_psSliders + 1, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 30, 140, 30, 0, 1000, 250,
-                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
-                  SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "250", 0, 0, OnSliderChange),
-    SliderStruct(g_psPanels + 1, g_psSliders + 2, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 60, 140, 30, 0, 1000, 250,
-                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
-                  SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "250", 0, 0, OnSliderChange),
-    SliderStruct(g_psPanels + 1, g_psSliders + 3, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 90, 140, 30, 0, 1000, 250,
-                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
-                  SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "250", 0, 0, OnSliderChange),
-    SliderStruct(g_psPanels + 1, g_psSliders + 4, 0,
                  &g_sKentec320x240x16_SSD2119, 150, 120, 140, 30, 0, 1000, 250,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                   SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
@@ -139,8 +127,26 @@ tSliderWidget g_psSliders[] = {
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm20, "250", 0, 0, OnSliderChange),
 };
-
 #define NUM_SLIDERS (sizeof(g_psSliders) / sizeof(g_psSliders[0]))
+
+tPushButtonWidget g_psConfigButtons[] = {
+    RectangularButtonStruct(g_psPanels + 1, g_psConfigButtons + 1, 0,
+                            &g_sKentec320x240x16_SSD2119, 0, 23, 107, 33,
+                            PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
+                            ClrAqua, ClrMidnightBlue, ClrWhite, ClrSilver,
+                            &g_sFontFixed6x8, "Motor", 0, 0, 0, 0, OnConfigButtonPress),
+    RectangularButtonStruct(g_psPanels + 1, g_psConfigButtons + 2, 0,
+                            &g_sKentec320x240x16_SSD2119, 107, 23, 107, 33,
+                            PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
+                            ClrMidnightBlue, ClrMidnightBlue, ClrWhite, ClrSilver,
+                            &g_sFontFixed6x8, "Distance", 0, 0, 0, 0, OnConfigButtonPress),
+    RectangularButtonStruct(g_psPanels + 1, g_psSliders, 0,
+                            &g_sKentec320x240x16_SSD2119, 213, 23, 107, 33,
+                            PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
+                            ClrMidnightBlue, ClrMidnightBlue, ClrWhite, ClrSilver,
+                            &g_sFontFixed6x8, "Temperature", 0, 0, 0, 0, OnConfigButtonPress),
+};
+#define NUM_CONFIG_BUTTONS (sizeof(g_psConfigButtons) / sizeof(g_psConfigButtons[0]))
 
 tPushButtonWidget g_psPlotButtons[] = {
     RectangularButtonStruct(g_psPanels + 2, g_psPlotButtons + 1, 0,
@@ -176,7 +182,6 @@ tPushButtonWidget g_psPlotButtons[] = {
 };
 
 #define NUM_PLOT_BUTTONS (sizeof(g_psPlotButtons) / sizeof(g_psPlotButtons[0]))
-uint32_t g_ui32CurrentPlot = 10;
 
 Canvas(g_sCanvas3, g_psPanels + 2, g_psPlotButtons, 0, &g_sKentec320x240x16_SSD2119, 60,
        62, 200, 140, CANVAS_STYLE_OUTLINE | CANVAS_STYLE_APP_DRAWN, 0, ClrGray,
@@ -185,10 +190,13 @@ Canvas(g_sCanvas3, g_psPanels + 2, g_psPlotButtons, 0, &g_sKentec320x240x16_SSD2
 Canvas(g_sSensorPlots, g_psPanels + 2, &g_sCanvas3, 0, &g_sKentec320x240x16_SSD2119, 0, 24,
        320, 216, CANVAS_STYLE_APP_DRAWN, 0, 0, 0, 0, 0, 0, OnSensorPlotsPaint);
 
+Canvas(g_sConfiguration, g_psPanels + 2, &g_psConfigButtons, 0, &g_sKentec320x240x16_SSD2119, 0, 24,
+       320, 216, CANVAS_STYLE_APP_DRAWN, 0, 0, 0, 0, 0, 0, OnConfigurationPaint);
+
 tCanvasWidget g_psPanels[] = {
     CanvasStruct(0, 0, &g_sIntroduction, &g_sKentec320x240x16_SSD2119, 0, 24,
                  320, 216, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
-    CanvasStruct(0, 0, &g_psSliders, &g_sKentec320x240x16_SSD2119, 0, 24,
+    CanvasStruct(0, 0, &g_sConfiguration, &g_sKentec320x240x16_SSD2119, 0, 24,
                  320, 216, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
     CanvasStruct(0, 0, &g_sSensorPlots, &g_sKentec320x240x16_SSD2119, 0, 24, 320,
                  216, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
@@ -199,16 +207,16 @@ tCanvasWidget g_psPanels[] = {
 char *g_pcPanei32Names[] =
 {
     "     Motor Control     ",
-    "     System Status     ",
+    "     System Configuration     ",
     "     Sensor Data     ",
 };
 
 RectangularButton(g_sPrevious, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 0, 190,
-                  50, 50, PB_STYLE_FILL, ClrBlack, ClrBlack, 0, ClrSilver,
+                  50, 50, PB_STYLE_FILL | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY, ClrBlack, ClrBlack, 0, ClrSilver,
                   &g_sFontCm20, "-", g_pui8Blue50x50, g_pui8Blue50x50Press, 0, 0,
                   OnPrevious);
 RectangularButton(g_sNext, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 270, 190,
-                  50, 50, PB_STYLE_IMG | PB_STYLE_TEXT, ClrBlack, ClrBlack, 0,
+                  50, 50, PB_STYLE_IMG | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY, ClrBlack, ClrBlack, 0,
                   ClrSilver, &g_sFontCm20, "+", g_pui8Blue50x50,
                   g_pui8Blue50x50Press, 0, 0, OnNext);
 
@@ -269,7 +277,8 @@ void OnNext(tWidget *psWidget) {
 }
 
 void OnIntroPaint(tWidget *psWidget, tContext *psContext) {
-    if(MotorState == FAULT) {
+    EvMotorState_t motorState = MotorControl_GetState();
+    if(motorState == EV_MOTOR_STATE_ESTOP_BRAKING || motorState == EV_MOTOR_STATE_FAULT_LATCHED) {
         GrContextFontSet(psContext, &g_sFontCm18);
         GrContextForegroundSet(psContext, ClrSilver);
         GrStringDrawCentered(psContext, "An Emergency Stop Has Been Triggered.", -1, 160, 32, 0);
@@ -289,6 +298,30 @@ void OnSensorPlotsPaint(tWidget *psWidget, tContext *psContext) {
     tRectangle clearRect = {61, 63, 258, 200};
     GrContextForegroundSet(&sContext, ClrBlack);
     GrRectFill(&sContext, &clearRect);
+}
+
+void OnConfigurationPaint(tWidget *psWidget, tContext *psContext) {
+
+}
+
+void OnConfigButtonPress(tWidget *psWidget) {
+    uint32_t ui32Idx;
+    for(ui32Idx = 0; ui32Idx < NUM_CONFIG_BUTTONS; ui32Idx++) {
+        if(psWidget == (tWidget *)(g_psConfigButtons + ui32Idx)) {
+            break;
+        }
+    }
+
+    if(ui32Idx == NUM_CONFIG_BUTTONS || ui32Idx == g_ui32CurrentConfig) {
+        return;
+    }
+
+    PushButtonFillColorSet((tPushButtonWidget *)(g_psConfigButtons + ui32Idx), ClrAqua);
+    WidgetPaint((tWidget *)(g_psConfigButtons + ui32Idx));
+    PushButtonFillColorSet((tPushButtonWidget *)(g_psConfigButtons + g_ui32CurrentConfig), ClrMidnightBlue);
+    WidgetPaint((tWidget *)(g_psConfigButtons + g_ui32CurrentConfig));
+
+    g_ui32CurrentConfig = ui32Idx;
 }
 
 void OnFaultLatched(void) {
@@ -392,7 +425,8 @@ void OnCanvasPaint(tWidget *psWidget, tContext *psContext) {
 }
 
 void OnStartStopButtonPress(tWidget *psWidget) {
-    if (MotorState == IDLE) {
+    EvMotorState_t motorState = MotorControl_GetState();
+    if (motorState == EV_MOTOR_STATE_IDLE || MotorState == IDLE) {
         PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Stop Motor");
         PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrRedMask);
         MotorControl_Start();
@@ -448,24 +482,26 @@ void UpdateBanner() {
     sRect.i16XMax = GrContextDpyWidthGet(&sContext) - 1;
     sRect.i16YMax = 23;
 
-    switch (MotorState) {
-        case IDLE:
+    EvMotorState_t motorState = MotorControl_GetState();
+
+    switch (motorState) {
+        case EV_MOTOR_STATE_IDLE:
             GrContextForegroundSet(&sContext, ClrGold);
             GrRectFill(&sContext, &sRect);
             break;
-        case STARTING: 
+        case EV_MOTOR_STATE_STARTING: 
             GrContextForegroundSet(&sContext, ClrGold);
             GrRectFill(&sContext, &sRect);
             break;
-        case RUNNING:
+        case EV_MOTOR_STATE_RUNNING:
             GrContextForegroundSet(&sContext, ClrGreen);
             GrRectFill(&sContext, &sRect);
             break;
-        case ESTOP:
+        case EV_MOTOR_STATE_ESTOP_BRAKING:
             GrContextForegroundSet(&sContext, ClrRedMask);
             GrRectFill(&sContext, &sRect);
             break;
-        case FAULT:
+        case EV_MOTOR_STATE_FAULT_LATCHED:
             GrContextForegroundSet(&sContext, ClrRedMask);
             GrRectFill(&sContext, &sRect);
             break;  
@@ -540,6 +576,8 @@ static void prvGUITask( void *pvParameters ) {
         EvMotorState_t motorState = MotorControl_GetState();
         if(motorState != EV_MOTOR_STATE_ESTOP_BRAKING) {
             WidgetMessageQueueProcess();
+        } else {
+            UpdateBanner();
         }
 
         // vTaskDelay(10);
@@ -569,6 +607,12 @@ void GuiDashboard_Init(void) {
 void GuiDashboard_Update(void)
 {
     EvMotorState_t motorState = MotorControl_GetState();
+
+    if(motorState != g_lastState) {
+        UpdateBanner();
+        g_lastState = motorState;
+    }
+
     if(!faultLatched && motorState == EV_MOTOR_STATE_FAULT_LATCHED) {
         OnFaultLatched();
     }
