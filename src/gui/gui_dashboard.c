@@ -53,13 +53,15 @@ uint32_t graphY[6];
 uint32_t lastGraphY[6];
 bool plotToggle = false;
 bool faultLatched = false;
-uint32_t g_thresholds[6];
-uint32_t g_temp_thresholds[6];
+uint32_t g_thresholds[4] = {250, 250, 250, 25};
+uint32_t g_temp_thresholds[4] = {250, 250, 250, 25};
 uint32_t g_max_values[6] = {500, 500, 1000, 50, 100, 500};
 volatile uint32_t g_elapsed_ticks = 405000;
 char clockBuf[20];
 char plotBuf[20];
 char configBuf[20];
+char configBuf2[20];
+char configBuf3[20];
 
 static void prvGUITask( void *pvParameters );
 void OnPrevious(tWidget *psWidget);
@@ -75,13 +77,15 @@ void ClockUpdate();
 void OnSensorButtonPress(tWidget *psWidget);
 void OnFaultAcknowledgeButtonPress(tWidget *psWidget);
 void OnConfigButtonPress(tWidget *psWidget);
+void OnThresholdButtonPress(tWidget *psWidget);
 extern tCanvasWidget g_psPanels[];
 uint32_t g_ui32CurrentPlot = 10;
 uint32_t g_ui32CurrentConfig = 0;
 uint32_t g_ui32LastConfig = 0;
 EvMotorState_t g_currentState = EV_MOTOR_STATE_IDLE;
 EvMotorState_t g_lastState = EV_MOTOR_STATE_IDLE;
-bool updateConfigRequest = false;
+bool configUpdateRequest = false;
+bool clockUpdateRequest = true;
 
 //for testing
 enum MotorStates {
@@ -122,20 +126,40 @@ tPushButtonWidget g_psClock[] = {
 };
 
 tSliderWidget g_psSliders[] = {
-    SliderStruct(g_psPanels + 1, g_psSliders + 1, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 120, 140, 30, 0, 1000, 250,
-                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
-                  SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
-                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "250", 0, 0, OnSliderChange),
     SliderStruct(g_psPanels + 1, 0, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 150, 140, 30, 0, 1000, 250,
+                 &g_sKentec320x240x16_SSD2119, 150, 129, 140, 18, 0, 1000, 250,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                   SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
-                 &g_sFontCm20, "250", 0, 0, OnSliderChange),
+                 &g_sFontCm16, "250", 0, 0, OnSliderChange),
+    SliderStruct(g_psPanels + 1, 0, 0,
+                 &g_sKentec320x240x16_SSD2119, 150, 149, 140, 18, 0, 1000, 250,
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
+                  SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm16, "250", 0, 0, OnSliderChange),
+    SliderStruct(g_psPanels + 1, 0, 0,
+                 &g_sKentec320x240x16_SSD2119, 150, 149, 140, 18, 0, 1000, 250,
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
+                  SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm16, "250", 0, 0, OnSliderChange),
+    SliderStruct(g_psPanels + 1, 0, 0,
+                 &g_sKentec320x240x16_SSD2119, 150, 149, 140, 18, 0, 50, 25,
+                 (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
+                  SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
+                 ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
+                 &g_sFontCm16, "250", 0, 0, OnSliderChange),
 };
 #define NUM_SLIDERS (sizeof(g_psSliders) / sizeof(g_psSliders[0]))
+
+tPushButtonWidget g_psThresholdButton[] = {
+    RectangularButtonStruct(g_psPanels + 1, 0, 0,
+                        &g_sKentec320x240x16_SSD2119, 100, 200, 120, 33,
+                        PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
+                        ClrGray, ClrMidnightBlue, ClrDarkGray, ClrWhite,
+                        &g_sFontFixed6x8, "Update System", 0, 0, 0, 0, OnThresholdButtonPress),
+};
 
 tPushButtonWidget g_psConfigButtons[] = {
     RectangularButtonStruct(g_psPanels + 1, g_psConfigButtons + 1, 0,
@@ -148,7 +172,7 @@ tPushButtonWidget g_psConfigButtons[] = {
                             PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
                             ClrMidnightBlue, ClrMidnightBlue, ClrWhite, ClrSilver,
                             &g_sFontFixed6x8, "VL53L0X", 0, 0, 0, 0, OnConfigButtonPress),
-    RectangularButtonStruct(g_psPanels + 1, g_psSliders, 0,
+    RectangularButtonStruct(g_psPanels + 1, 0, 0,
                             &g_sKentec320x240x16_SSD2119, 213, 23, 107, 33,
                             PB_STYLE_FILL | PB_STYLE_OUTLINE | PB_STYLE_TEXT | PB_STYLE_RELEASE_NOTIFY,
                             ClrMidnightBlue, ClrMidnightBlue, ClrWhite, ClrSilver,
@@ -325,16 +349,33 @@ void UpdateConfigPage() {
     EvSensorData_t sensorData = SensorManager_GetFilteredData();
     GrContextFontSet(&sContext, &g_sFontCm16);
     if(g_ui32LastConfig != g_ui32CurrentConfig) {
-        tRectangle configClearRect = {0, 58, 250, 100};
+        WidgetRemove((tWidget *)(g_psSliders));
+        WidgetRemove((tWidget *)(g_psSliders + 1));
+        WidgetRemove((tWidget *)(g_psSliders + 2));
+        WidgetRemove((tWidget *)(g_psSliders + 3));
+        tRectangle configClearRect = {0, 58, 320, 190};
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &configClearRect);
-    }   
+        WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)g_psThresholdButton);
+        WidgetPaint((tWidget *)g_psThresholdButton);
+    }
 
-    // SensorManager_SetThresholds();
     if(g_ui32CurrentConfig == 0) {
         if(g_ui32LastConfig != 0) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Motor Speed: ", -1, 5, 62, 0);
+            GrStringDraw(&sContext, "Desired Speed", -1, 5, 130, 0);
+            GrStringDraw(&sContext, "Power Threshold", -1, 5, 150, 0);
+            WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)g_psSliders);
+            usprintf(configBuf2, "%d", g_thresholds[0]);
+            SliderTextSet((tWidget *)(g_psSliders), configBuf2);
+            SliderValueSet((tWidget *)(g_psSliders), g_thresholds[0]);
+            WidgetPaint((tWidget *)g_psSliders);
+            WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)(g_psSliders + 1));
+            usprintf(configBuf3, "%d", g_thresholds[1]);
+            SliderTextSet((tWidget *)(g_psSliders + 1), configBuf3);
+            SliderValueSet((tWidget *)(g_psSliders + 1), g_thresholds[1]);
+            WidgetPaint((tWidget *)(g_psSliders + 1));            
             g_ui32LastConfig = g_ui32CurrentConfig;
         }
         tRectangle configClearRect1 = {100, 62, 160, 78};
@@ -343,11 +384,17 @@ void UpdateConfigPage() {
         GrContextForegroundSet(&sContext, ClrWhite);
         usprintf(configBuf, "%drpm", sensorData.motor_speed_rpm);
         GrStringDraw(&sContext, configBuf, -1, 100, 62, 0);
-
-    } else if(g_ui32CurrentConfig == 1) {
+    } 
+    else if(g_ui32CurrentConfig == 1) {
         if(g_ui32LastConfig != 1) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Nearest Object: ", -1, 5, 62, 0);
+            GrStringDraw(&sContext, "Distance Threshold", -1, 5, 150, 0);
+            WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)(g_psSliders + 2));
+            usprintf(configBuf2, "%d", g_thresholds[2]);
+            SliderTextSet((tWidget *)(g_psSliders + 2), configBuf2);
+            SliderValueSet((tWidget *)(g_psSliders + 2), g_thresholds[2]);
+            WidgetPaint((tWidget *)(g_psSliders + 2));
             g_ui32LastConfig = g_ui32CurrentConfig;
         }
         tRectangle configClearRect1 = {110, 62, 165, 75};
@@ -356,23 +403,48 @@ void UpdateConfigPage() {
         GrContextForegroundSet(&sContext, ClrWhite);
         usprintf(configBuf, "%dmm", sensorData.distance_mm);
         GrStringDraw(&sContext, configBuf, -1, 115, 62, 0);
-    } else if(g_ui32CurrentConfig == 2) {
+    } 
+    else if(g_ui32CurrentConfig == 2) {
         if(g_ui32LastConfig != 2) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Current Temperature: ", -1, 5, 62, 0);
             GrStringDraw(&sContext, "Relative Humidity: ", -1, 5, 77, 0);
+            GrStringDraw(&sContext, "Cooling: ", -1, 5, 92, 0);
+            GrStringDraw(&sContext, "Cooling Threshold", -1, 5, 150, 0);
+            WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)(g_psSliders + 3));
+            usprintf(configBuf2, "%d", g_thresholds[3]);
+            SliderTextSet((tWidget *)(g_psSliders + 3), configBuf2);
+            SliderValueSet((tWidget *)(g_psSliders + 3), g_thresholds[3]);
+            WidgetPaint((tWidget *)(g_psSliders + 3));
             g_ui32LastConfig = g_ui32CurrentConfig;
         }
-        tRectangle configClearRect1 = {160, 62, 180, 75};
-        tRectangle configClearRect2 = {140, 77, 160, 90};
+        tRectangle configClearRect1 = {160, 62, 190, 75};
+        tRectangle configClearRect2 = {140, 77, 170, 90};
+        tRectangle configClearRect3 = {63, 92, 85, 105};
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &configClearRect1);
         GrRectFill(&sContext, &configClearRect2);
+        GrRectFill(&sContext, &configClearRect3);
         GrContextForegroundSet(&sContext, ClrWhite);
         usprintf(configBuf, "%dC", sensorData.cabin_temperature_c_x10);
         GrStringDraw(&sContext, configBuf, -1, 160, 62, 0);
         usprintf(configBuf, "%d%%", sensorData.cabin_humidity_rh_x10);
         GrStringDraw(&sContext, configBuf, -1, 140, 77, 0);
+        GrStringDraw(&sContext, sensorData.cabin_temperature_c_x10 >= g_thresholds[3] ? "On" : "Off", -1, 63, 92, 0);
+    }
+}
+
+void OnThresholdButtonPress(tWidget *psWidget){
+    if(g_ui32CurrentConfig == 0) {
+        g_thresholds[0] = g_temp_thresholds[0];
+        g_thresholds[1] = g_temp_thresholds[1];
+        MotorControl_SetSpeed(g_thresholds[0]);
+    }
+    else if(g_ui32CurrentConfig == 1) {
+        g_thresholds[2] = g_temp_thresholds[2];
+    }
+    else if(g_ui32CurrentConfig == 2) {
+        g_thresholds[3] = g_temp_thresholds[3];
     }
 }
 
@@ -600,10 +672,11 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value) {
             break;
         }
     }
+    if(ui32Idx == NUM_SLIDERS) return;
     g_temp_thresholds[ui32Idx] = i32Value;
     usprintf(pcSliderText, "%3d", i32Value);
     SliderTextSet(psWidget, pcSliderText);
-    WidgetPaint(psWidget);
+    WidgetPaint((tWidget *)(g_psSliders + ui32Idx));
 }
 
 void ClockUpdate() {
@@ -621,7 +694,7 @@ void ClockUpdate() {
 void vClockTimerCallback(TimerHandle_t xTimer) {
     g_elapsed_ticks++;
     if(g_elapsed_ticks % 10 == 0) {
-        ClockUpdate();
+        clockUpdateRequest = true;
     }
 }
 
@@ -671,9 +744,14 @@ static void prvGUITask( void *pvParameters ) {
             OnFaultLatched();
         }
 
-        if(updateConfigRequest) {
+        if(configUpdateRequest) {
             UpdateConfigPage();
-            updateConfigRequest = false;
+            configUpdateRequest = false;
+        }
+
+        if(clockUpdateRequest) {
+            ClockUpdate();
+            clockUpdateRequest = false;
         }
 
 
@@ -728,7 +806,7 @@ void GuiDashboard_Update(void)
     //     OnFaultLatched();
     // }
 
-    if(g_ui32Panel == 1) updateConfigRequest = true;
+    if(g_ui32Panel == 1) configUpdateRequest = true;
     /* TODO: show motor state, faults, speed input, thresholds etc */
 }
 
