@@ -105,7 +105,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // Quadrature Encoder 0
     IntDefaultHandler,                      // ADC Sequence 0
     IntDefaultHandler,                      // ADC Sequence 1
-    MotorPower_ADC_ISR,                      // ADC Sequence 2
+    IntDefaultHandler,                      // ADC Sequence 2
     TouchScreenIntHandler,                      // ADC Sequence 3
     IntDefaultHandler,                      // Watchdog timer
     IntDefaultHandler,                      // Timer 0 subtimer A
@@ -137,7 +137,7 @@ void (* const g_pfnVectors[])(void) =
     IntDefaultHandler,                      // uDMA Error
     IntDefaultHandler,                      // ADC1 Sequence 0
     IntDefaultHandler,                      // ADC1 Sequence 1
-    IntDefaultHandler,                      // ADC1 Sequence 2
+    MotorPower_ADC_ISR,                      // ADC1 Sequence 2
     IntDefaultHandler,                      // ADC1 Sequence 3
     IntDefaultHandler,                      // External Bus Interface 0
     IntDefaultHandler,                      // GPIO Port J
