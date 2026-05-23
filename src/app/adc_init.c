@@ -33,8 +33,8 @@ void prvADCInit(void)
     GPIOPinTypeADC(POWER_ADC_PORT_A, POWER_ADC_PIN_A);
     GPIOPinTypeADC(POWER_ADC_PORT_B, POWER_ADC_PIN_B);
  
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC0);
-    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC0));
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1));
  
     // Use hardware oversampling x4 to further reduce switching noise
     // Each reported sample is average of 4 hardware conversions
@@ -54,8 +54,8 @@ void prvADCInit(void)
     
                              
     ADCIntEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
-    IntEnable(INT_ADC0SS2);
-    IntPrioritySet(INT_ADC0SS2, 0xE0);
+    IntEnable(INT_ADC1SS2);
+    IntPrioritySet(INT_ADC1SS2, 0xE0);
  
     ADCSequenceEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
 }
