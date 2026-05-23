@@ -15,6 +15,7 @@
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
 #include "utils/uartstdio.h"
+#include "drivers/rtos_hw_drivers.h"
 
 
 

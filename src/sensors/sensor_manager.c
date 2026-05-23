@@ -14,12 +14,22 @@
 #include "sensors/sensor_filter.h"
 #include "sensors/sht31_sensor.h"
 #include "sensors/vl53l0x_sensor.h"
+#include "motor/motor_driver.h"
 #include "tivaware_driverlib/uart.h"
 #include "utils/uartstdio.h"
 
+#define SENSOR_DEFAULT_DISTANCE_MM 300U
+#define SENSOR_DEFAULT_POWER_W    1800U
+#define SENSOR_DEFAULT_COOLING_C  25
+
 EvSensorDataRaw_t s_rawData;
 EvSensorData_t s_filteredData;
-EvSensorThresholds_t s_thresholds;
+EvSensorThresholds_t s_thresholds = {
+    .max_motor_power_w = SENSOR_DEFAULT_POWER_W,
+    .min_distance_mm = SENSOR_DEFAULT_DISTANCE_MM,
+    .cooling_threshold_c_x10 = SENSOR_DEFAULT_COOLING_C,
+    .heating_threshold_c_x10 = 0
+};
 
 MovingAverageFilter_t g_lightFilter;
 MovingAverageFilter_t g_tempFilter;
@@ -109,6 +119,16 @@ EvSensorThresholds_t SensorManager_GetThresholds(void)
     return s_thresholds;
 }
 
+void SensorManager_SetThresholds(const EvSensorThresholds_t *thresholds)
+{
+    if (thresholds == NULL)
+    {
+        return;
+    }
+
+    s_thresholds = *thresholds;
+}
+
 EvSensorThresholds_t SensorManager_CheckThresholds(void)
 {
 
@@ -126,6 +146,8 @@ EvSensorThresholds_t SensorManager_CheckThresholds(void)
     {
         //FaultManager_TriggerEStop();
     }
+
+    return s_thresholds;
 }
 
 
@@ -134,9 +156,8 @@ void SensorManager_Poll(void)
     AmbientLightSensor_Sample();
     Sht31Sensor_Sample();
     Vl53l0xSensor_Sample();
+    s_rawData.motor_speed_rpm = MotorDriver_GetRpm();
     updateFilter();
     SensorManager_CheckThresholds();
 
 }
-
-

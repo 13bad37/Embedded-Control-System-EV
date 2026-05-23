@@ -1,11 +1,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
- 
+
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
- 
+
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
 #include "inc/hw_adc.h"
@@ -31,25 +31,17 @@ void MotorPower_ADC_ISR(void)
     
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
-    ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf);
-    
-    SensorMsg_t msg = { .type = SENSOR_MSG_POWERA, .value = (uint32_t)adcBuf[0] };
+    ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples
+
     if (rawdataQueue != NULL)
     {
-        xQueueSendToBackFromISR(rawdataQueue, &msg, 0);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    }
-    SensorMsg_t msg1 = { .type = SENSOR_MSG_POWERB, .value = (uint32_t)adcBuf[1] };
-    if (rawdataQueue != NULL)
-    {
-        xQueueSendToBackFromISR(rawdataQueue, &msg1, 0);
+        SensorMsg_t msgA = { .type = SENSOR_MSG_POWERA, .value = adcBuf[0] };
+        SensorMsg_t msgB = { .type = SENSOR_MSG_POWERB, .value = adcBuf[1] };
+
+        /* Keep the ISR short; the sensor task can do the maths + filtering. */
+        xQueueSendToBackFromISR(rawdataQueue, &msgA, &xHigherPriorityTaskWoken);
+        xQueueSendToBackFromISR(rawdataQueue, &msgB, &xHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
 
 }
-
-
-
-    
-    
-    

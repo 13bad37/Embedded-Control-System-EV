@@ -6,8 +6,6 @@
 
 void SensorManager_Init(void);
 void SensorManager_Poll(void);
-
-
 typedef enum {
     SENSOR_MSG_SPEED,
     SENSOR_MSG_LIGHT,
@@ -26,5 +24,6 @@ extern QueueHandle_t rawdataQueue;
 
 EvSensorDataRaw_t SensorManager_GetRawData(void);
 EvSensorData_t SensorManager_GetFilteredData(void);
+EvSensorThresholds_t SensorManager_GetThresholds(void);
 EvSensorThresholds_t SensorManager_CheckThresholds(void);
 void SensorManager_SetThresholds(const EvSensorThresholds_t *thresholds);

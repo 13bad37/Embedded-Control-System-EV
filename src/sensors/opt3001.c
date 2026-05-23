@@ -42,7 +42,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <math.h>
-#include "sensors/i2C2ShtDriver.h"
+#include "sensors/i2c2ShtDriver.h"
 #include "sensors/opt3001.h"
 #include "utils/uartstdio.h"
 
