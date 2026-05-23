@@ -3,6 +3,7 @@
 #include "app/fault_manager.h"
 #include "rtos/message_bus.h"
 #include "motor/motor_control.h"
+#include "motor/motor_state_machine.h"
 #include "utils/uartstdio.h"
 #include "driverlib/gpio.h"
 #include "driverlib/sysctl.h"

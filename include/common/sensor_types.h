@@ -14,16 +14,6 @@ typedef enum
 
 typedef struct
 {
-    uint32_t motor_power_w;
-    uint32_t motor_speed_rpm;
-    uint32_t ambient_light_lux;
-    int16_t cabin_temperature_c_x10;
-    uint16_t cabin_humidity_rh_x10;
-    uint16_t distance_mm;
-} EvSensorData_t;
-
-typedef struct
-{
     uint32_t lux;
     uint32_t temperatureC;
     uint32_t humidityRh;
@@ -31,6 +21,16 @@ typedef struct
     uint32_t motor_speed_rpm;
     uint32_t motor_power_w;
 } EvSensorDataRaw_t;
+
+typedef struct
+{
+    uint32_t motor_power_w;
+    uint32_t motor_speed_rpm;
+    uint32_t ambient_light_lux;
+    int16_t cabin_temperature_c_x10;
+    uint16_t cabin_humidity_rh_x10;
+    uint16_t distance_mm;
+} EvSensorData_t;
 
 typedef struct
 {

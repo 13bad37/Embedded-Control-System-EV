@@ -4,7 +4,7 @@
 #include "task.h"
 #include "semphr.h"
 
-#include "sensors/i2C2ShtDriver.h"
+#include "sensors/i2c2ShtDriver.h"
 #include "sensors/ambient_light_sensor.h"
 #include "sensors/sensor_manager.h"
 #include "tivaware_driverlib/uart.h"
@@ -39,7 +39,6 @@ void AmbientLightSensor_Sample(void)
     float convertedLux = 0;
 
     TickType_t currentTick;
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
     currentTick = xTaskGetTickCount();
 
@@ -57,7 +56,6 @@ void AmbientLightSensor_Sample(void)
         if (rawdataQueue != NULL)
         {
             xQueueSendToBack(rawdataQueue, &msg, 0);
-            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
         }
     }
 }

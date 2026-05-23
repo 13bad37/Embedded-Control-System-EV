@@ -96,6 +96,8 @@
 #define TS_YN_PERIPH            SYSCTL_PERIPH_GPIOM
 #define TS_YN_BASE              GPIO_PORTM_BASE
 #define TS_YN_PIN               GPIO_PIN_6//D
+#define TS_TIMER_PERIPH         SYSCTL_PERIPH_TIMER3
+#define TS_TIMER_BASE           TIMER3_BASE
 
 //*****************************************************************************
 //
@@ -680,7 +682,7 @@ TouchScreenIntHandler(void)
 //! resources:
 //!
 //! - ADC sample sequence 3
-//! - Timer 1 subtimer A
+//! - Timer 3 subtimer A
 //!
 //! \return None.
 //
@@ -710,7 +712,7 @@ TouchScreenInit(uint32_t ui32SysClock)
     SysCtlPeripheralEnable(TS_P_PERIPH);
     SysCtlPeripheralEnable(TS_XN_PERIPH);
     SysCtlPeripheralEnable(TS_YN_PERIPH);
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
+    SysCtlPeripheralEnable(TS_TIMER_PERIPH);
 
     //
     // Configure the ADC sample sequence used to read the touch screen reading.
@@ -741,21 +743,20 @@ TouchScreenInit(uint32_t ui32SysClock)
     // See if the ADC trigger timer has been configured, and configure it only
     // if it has not been configured yet.
     //
-    if((HWREG(TIMER1_BASE + TIMER_O_CTL) & TIMER_CTL_TAEN) == 0)
+    if((HWREG(TS_TIMER_BASE + TIMER_O_CTL) & TIMER_CTL_TAEN) == 0)
     {
         //
-        // Configure the timer to trigger the sampling of the touch screen
-        // every two millisecond.
+        // Timer1 is used by hall RPM, so touch gets its own timer.
         //
-        TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC);
-        TimerLoadSet(TIMER1_BASE, TIMER_A, (ui32SysClock / 1000) - 1);
-        TimerControlTrigger(TIMER1_BASE, TIMER_A, true);
+        TimerConfigure(TS_TIMER_BASE, TIMER_CFG_PERIODIC);
+        TimerLoadSet(TS_TIMER_BASE, TIMER_A, (ui32SysClock / 1000) - 1);
+        TimerControlTrigger(TS_TIMER_BASE, TIMER_A, true);
 
         //
         // Enable the timer.  At this point, the touch screen state machine
         // will sample and run once per millisecond.
         //
-        TimerEnable(TIMER1_BASE, TIMER_A);
+        TimerEnable(TS_TIMER_BASE, TIMER_A);
     }
 }
 

@@ -37,7 +37,6 @@ void Sht31Sensor_Sample(void)
     uint16_t rawHumid;
 
     TickType_t currentTick;
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 
     currentTick = xTaskGetTickCount();
 
@@ -65,11 +64,11 @@ void Sht31Sensor_Sample(void)
         SensorMsg_t msg = { .type = SENSOR_MSG_TEMP, .value = (uint32_t)temperatureC };
         SensorMsg_t msg2 = { .type = SENSOR_MSG_HUMID, .value = (uint32_t)humidityRh };
 
-        xQueueSendToBack(rawdataQueue, &msg, 0);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    
-        xQueueSendToBack(rawdataQueue, &msg2, 0);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        if (rawdataQueue != NULL)
+        {
+            xQueueSendToBack(rawdataQueue, &msg, 0);
+            xQueueSendToBack(rawdataQueue, &msg2, 0);
+        }
         
     }
 }

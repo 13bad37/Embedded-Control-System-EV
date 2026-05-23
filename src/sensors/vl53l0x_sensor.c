@@ -43,7 +43,6 @@ void Vl53l0xSensor_Init(void)
 
 void Vl53l0xSensor_Sample(void)
 {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     uint8_t   rxData[2] = {0};
     uint16_t  distanceMm;
     TickType_t currentTick = xTaskGetTickCount();
@@ -89,8 +88,10 @@ void Vl53l0xSensor_Sample(void)
 
         SensorMsg_t msg = { .type = SENSOR_MSG_DISTANCE, .value = (uint32_t)distanceMm };
 
-        xQueueSendToBack(rawdataQueue, &msg, 0);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        if (rawdataQueue != NULL)
+        {
+            xQueueSendToBack(rawdataQueue, &msg, 0);
+        }
         
 
 
