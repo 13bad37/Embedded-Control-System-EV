@@ -56,7 +56,7 @@ bool faultLatched = false;
 uint32_t g_thresholds[4] = {250, 250, 250, 25};
 uint32_t g_temp_thresholds[4] = {250, 250, 250, 25};
 uint32_t g_max_values[6] = {500, 500, 1000, 50, 100, 500};
-volatile uint32_t g_elapsed_ticks = 405000;
+volatile uint32_t g_elapsed_seconds = 40500;
 char clockBuf[20];
 char plotBuf[20];
 char configBuf[20];
@@ -87,6 +87,7 @@ EvMotorState_t g_lastState = EV_MOTOR_STATE_IDLE;
 bool configUpdateRequest = false;
 bool clockUpdateRequest = true;
 bool nightConditions = false;
+TickType_t g_lastTimerTicks;
 
 //for testing
 enum MotorStates {
@@ -703,20 +704,13 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value) {
 void ClockUpdate() {
     EvMotorState_t motorState = MotorControl_GetState();
     if (motorState == EV_MOTOR_STATE_ESTOP_BRAKING || motorState == EV_MOTOR_STATE_FAULT_LATCHED || g_ui32Panel != 0) return;
-    int32_t seconds = (g_elapsed_ticks / 10) % 60;
-    int32_t minutes = (g_elapsed_ticks / 600) % 60;
-    int32_t hours = (g_elapsed_ticks / 36000) % 12;
+    int32_t seconds = g_elapsed_seconds % 60;
+    int32_t minutes = (g_elapsed_seconds / 60) % 60;
+    int32_t hours = (g_elapsed_seconds / 3600) % 12;
     usprintf(clockBuf, "27/05/26 %02d:%02d:%02d", hours, minutes, seconds);
     PushButtonTextSet((tPushButtonWidget *)&g_psClock, clockBuf);
     WidgetPaint((tWidget *)&g_psClock);
 
-}
-
-void vClockTimerCallback(TimerHandle_t xTimer) {
-    g_elapsed_ticks++;
-    if(g_elapsed_ticks % 10 == 0) {
-        clockUpdateRequest = true;
-    }
 }
 
 static void prvGUITask( void *pvParameters ) {
@@ -779,12 +773,6 @@ static void prvGUITask( void *pvParameters ) {
         // EvMotorState_t motorState = MotorControl_GetState();
         // if(motorState != EV_MOTOR_STATE_ESTOP_BRAKING) {
         WidgetMessageQueueProcess();
-        // } else {
-        //     UpdateBanner();
-        // }
-        // if(motorState == EV_MOTOR_STATE_ESTOP_BRAKING) {
-        //     UpdateBanner();
-        // }
 
         // vTaskDelay(10);
     }
@@ -798,21 +786,20 @@ void GuiDashboard_Init(void) {
                  tskIDLE_PRIORITY + 1,
                  &xDisplayTaskHandle );
 
-    TimerHandle_t xClockTimer;
-    xClockTimer = xTimerCreate(
-        "PlotTimer",
-        pdMS_TO_TICKS(100),
-        pdTRUE,
-        NULL,
-        vClockTimerCallback
-    );
-    xTimerStart(xClockTimer, 0);
+    g_lastTimerTicks = xTaskGetTickCount();
 }
 
 void GuiDashboard_Update(void)
 {
     EvMotorState_t motorState = MotorControl_GetState();
     g_currentState = motorState;
+
+    TickType_t currentTicks = xTaskGetTickCount();
+    if((currentTicks - g_lastTimerTicks) >= pdMS_TO_TICKS(1000)) {
+        g_elapsed_seconds++;
+        clockUpdateRequest = true;
+        g_lastTimerTicks = currentTicks;
+    }
 
     EvSensorData_t tempSensorData = SensorManager_GetFilteredData();
     if(tempSensorData.ambient_light_lux >= 5) {
@@ -827,20 +814,6 @@ void GuiDashboard_Update(void)
         }
     }
 
-    // if(g_currentState != g_lastState) {
-    //     UpdateBanner();
-    //     g_lastState = motorState;
-    // }
-    // if(g_ui32Panel != g_ui32LastPanel) {
-    //     UpdateBanner();
-    //     g_ui32LastPanel = g_ui32Panel;
-    // }
-
-    // if(!faultLatched && g_currentState == EV_MOTOR_STATE_FAULT_LATCHED) {
-    //     OnFaultLatched();
-    // }
-
     if(g_ui32Panel == 1) configUpdateRequest = true;
-    /* TODO: show motor state, faults, speed input, thresholds etc */
 }
 
