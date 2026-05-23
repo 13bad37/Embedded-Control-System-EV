@@ -19,34 +19,32 @@
 #include "sensors/sensor_manager.h"
 #include "sensors/motor_power_sensor.h"
 #include "app/adc_init.h"
+#include "driverlib/adc.h"
 
 #include "motor/motor_state_machine.h"
 
-
-//extern EvSensorDataRaw_t s_rawData;
-
 uint32_t motor_power_w;
+static uint32_t adcBuf[2];
+
 void MotorPower_ADC_ISR(void)
 {
-    uint32_t adcBuf[2];
+    
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
-    ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples 
+    ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf);
     
-
-    
-    // SensorMsg_t msg = { .type = SENSOR_MSG_POWERA, .value = (uint32_t)adcBuf[0] };
-    // if (rawdataQueue != NULL)
-    // {
-    //     xQueueSendToBack(rawdataQueue, &msg, 0);
-    //     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    // }
-    // SensorMsg_t msg = { .type = SENSOR_MSG_POWERB, .value = (uint32_t)adcBuf[1] };
-    // if (rawdataQueue != NULL)
-    // {
-    //     xQueueSendToBack(rawdataQueue, &msg, 0);
-    //     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-    // }
+    SensorMsg_t msg = { .type = SENSOR_MSG_POWERA, .value = (uint32_t)adcBuf[0] };
+    if (rawdataQueue != NULL)
+    {
+        xQueueSendToBackFromISR(rawdataQueue, &msg, 0);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
+    SensorMsg_t msg1 = { .type = SENSOR_MSG_POWERB, .value = (uint32_t)adcBuf[1] };
+    if (rawdataQueue != NULL)
+    {
+        xQueueSendToBackFromISR(rawdataQueue, &msg1, 0);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+    }
 
 }
 

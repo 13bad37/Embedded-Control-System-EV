@@ -1,3 +1,6 @@
+#include "FreeRTOS.h"
+#include "queue.h"
+
 #include "motor/motor_control.h"
 #include "motor/motor_driver.h"
 #include "motor/motor_state_machine.h"
@@ -5,6 +8,7 @@
 #include "motor/speed_controller.h"
 #include "common/project_config.h"
 #include "utils/uartstdio.h"
+#include "sensors/sensor_manager.h"
 
 static EvMotorStatus_t s_motorStatus = {
     0U, 0U, 0U, 0U,
@@ -30,6 +34,8 @@ void MotorControl_Run(void)
     if (rpm > 0U)
     {
         s_motorStatus.actual_speed_rpm = rpm;
+        SensorMsg_t msg = { .type = SENSOR_MSG_SPEED, .value = rpm };
+        xQueueSendToBack(rawdataQueue, &msg, 0);
     }
 
     /* During estop braking, force RPM to 0 after 3 seconds

@@ -10,16 +10,12 @@
 
 #include "sensors/sensor_filter.h"
 #include "sensors/ambient_light_sensor.h"
-#include "sensors/hall_speed_sensor.h"
 #include "sensors/motor_power_sensor.h"
 #include "sensors/sensor_filter.h"
 #include "sensors/sht31_sensor.h"
 #include "sensors/vl53l0x_sensor.h"
 #include "tivaware_driverlib/uart.h"
 #include "utils/uartstdio.h"
-
-#define EMERGENCY_DISTANCE_MM     300
-#define EMERGENCY_POWER_W 1800
 
 EvSensorDataRaw_t s_rawData;
 EvSensorData_t s_filteredData;
@@ -71,8 +67,8 @@ EvSensorDataRaw_t SensorManager_GetRawData(void)
             case SENSOR_MSG_POWERB:
                 rawAdc1 = msg.value;
                 
-                int32_t rawA = (int32_t)rawAdc0 - 200;
-                int32_t rawB = (int32_t)rawAdc1 - 200;
+                int32_t rawA = (int32_t)rawAdc0;
+                int32_t rawB = (int32_t)rawAdc1;
                 
                 float vA = ((float)rawA / POWER_ADC_RESOLUTION) * POWER_VREF_V;
                 float vB = ((float)rawB / POWER_ADC_RESOLUTION) * POWER_VREF_V;
@@ -81,7 +77,7 @@ EvSensorDataRaw_t SensorManager_GetRawData(void)
                 float iB = vB / (POWER_CSA_GAIN * POWER_SHUNT_OHM);
                 
                 float iTotal = (iA + iB) * 1.5f; 
-                s_rawData.motor_power_w = (uint32_t)(POWER_SUPPLY_V * iTotal);
+                s_rawData.motor_power_w = (POWER_SUPPLY_V * iTotal);
                 break;
         }
     }
@@ -90,17 +86,14 @@ EvSensorDataRaw_t SensorManager_GetRawData(void)
 
 static void updateFilter(void)
 {
-    
-        
 
-        s_filteredData.ambient_light_lux = Filter_ApplyMovingAverage(&g_lightFilter, s_rawData.lux);
-        s_filteredData.cabin_temperature_c_x10 = Filter_ApplyMovingAverage(&g_tempFilter,  s_rawData.temperatureC);
-        s_filteredData.cabin_humidity_rh_x10 = Filter_ApplyMovingAverage(&g_humidFilter, s_rawData.humidityRh);
-        s_filteredData.motor_speed_rpm = Filter_ApplyMovingAverage(&g_speedFilter, s_rawData.motor_speed_rpm);
-        s_filteredData.motor_power_w = Filter_ApplyMovingAverage(&g_powerFilter, s_rawData.motor_power_w);
-        s_filteredData.distance_mm = Vl53l0xSensor_UpdateFilter(s_rawData.distanceMm);
+    s_filteredData.ambient_light_lux = Filter_ApplyMovingAverage(&g_lightFilter, s_rawData.lux, 4);
+    s_filteredData.cabin_temperature_c_x10 = Filter_ApplyMovingAverage(&g_tempFilter,  s_rawData.temperatureC, 4);
+    s_filteredData.cabin_humidity_rh_x10 = Filter_ApplyMovingAverage(&g_humidFilter, s_rawData.humidityRh, 4);
+    s_filteredData.motor_speed_rpm = Filter_ApplyMovingAverage(&g_speedFilter, s_rawData.motor_speed_rpm, 8);
+    s_filteredData.motor_power_w = Filter_ApplyMovingAverage(&g_powerFilter, s_rawData.motor_power_w, 8);
+    s_filteredData.distance_mm = Vl53l0xSensor_UpdateFilter(s_rawData.distanceMm);
     
-
 }
 
 
@@ -119,35 +112,22 @@ EvSensorThresholds_t SensorManager_GetThresholds(void)
 EvSensorThresholds_t SensorManager_CheckThresholds(void)
 {
 
-    if (s_filteredData.distance_mm < EMERGENCY_DISTANCE_MM)
+    if (s_filteredData.distance_mm < s_thresholds.min_distance_mm)
     {
         //FaultManager_TriggerEStop();
         //UARTprintf("EmergencySTOP");
     }
     
-    if (s_filteredData.motor_power_w > EMERGENCY_POWER_W)
+    if (s_filteredData.motor_power_w > s_thresholds.max_motor_power_w)
+    {
+        //FaultManager_TriggerEStop();
+    }
+    if (s_filteredData.cabin_temperature_c_x10 < s_thresholds.cooling_threshold_c_x10)
     {
         //FaultManager_TriggerEStop();
     }
 }
 
-static void SensorDebug_Print(void)
-{
-
-    UARTprintf("RawLux:%d FilteredLux:%d RawTempC:%d FilteredTempC:%d RawHumidPct:%d FilteredHumidPct:%d RawDistanceMm:%d FilteredDistanceMm:%d, RawRpm:%d FilteredRpm:%d, rawPower:%d, FilteredPower:%d\n",
-                s_rawData.lux,
-                s_filteredData.ambient_light_lux,
-                s_rawData.temperatureC,
-                s_filteredData.cabin_temperature_c_x10,
-                s_rawData.humidityRh,
-                s_filteredData.cabin_humidity_rh_x10,
-                s_rawData.distanceMm,
-                s_filteredData.distance_mm,
-                s_rawData.motor_speed_rpm,
-                s_filteredData.motor_speed_rpm,
-                s_rawData.motor_power_w,
-                s_filteredData.motor_power_w);
-}
 
 void SensorManager_Poll(void)
 {
@@ -155,8 +135,8 @@ void SensorManager_Poll(void)
     Sht31Sensor_Sample();
     Vl53l0xSensor_Sample();
     updateFilter();
-    //SensorManager_CheckThresholds();
-    SensorDebug_Print();
+    SensorManager_CheckThresholds();
+
 }
 
 

@@ -1,6 +1,6 @@
-#define POWER_ADC_PERIPH_A          SYSCTL_PERIPH_GPIOM
-#define POWER_ADC_PORT_A            GPIO_PORTM_BASE
-#define POWER_ADC_PIN_A             GPIO_PIN_4      // ISENA -> AIN0
+#define POWER_ADC_PERIPH_A          SYSCTL_PERIPH_GPIOE
+#define POWER_ADC_PORT_A            GPIO_PORTE_BASE
+#define POWER_ADC_PIN_A             GPIO_PIN_3      // ISENC -> AIN0
 
 #define POWER_ADC_PERIPH_B          SYSCTL_PERIPH_GPIOD
 #define POWER_ADC_PORT_B            GPIO_PORTD_BASE

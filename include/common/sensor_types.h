@@ -24,6 +24,16 @@ typedef struct
 
 typedef struct
 {
+    uint32_t lux;
+    uint32_t temperatureC;
+    uint32_t humidityRh;
+    uint32_t distanceMm;
+    uint32_t motor_speed_rpm;
+    uint32_t motor_power_w;
+} EvSensorDataRaw_t;
+
+typedef struct
+{
     uint32_t max_motor_power_w;
     uint16_t min_distance_mm;
     int16_t cooling_threshold_c_x10;

@@ -38,7 +38,7 @@ void prvADCInit(void)
  
     // Use hardware oversampling x4 to further reduce switching noise
     // Each reported sample is average of 4 hardware conversions
-    ADCHardwareOversampleConfigure(POWER_ADC_BASE, 4);
+    //ADCHardwareOversampleConfigure(POWER_ADC_BASE, 4);
  
     // tell the ADC to be triggered by the timer 
     ADCSequenceConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER,
@@ -55,6 +55,7 @@ void prvADCInit(void)
                              
     ADCIntEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
     IntEnable(INT_ADC0SS2);
+    IntPrioritySet(INT_ADC0SS2, 0xE0);
  
     ADCSequenceEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
 }

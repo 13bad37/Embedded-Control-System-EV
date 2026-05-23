@@ -17,6 +17,9 @@
 #include "inc/hw_memmap.h"
 #include "inc/hw_ints.h"
 #include "driverlib/gpio.h"
+#include "app/power_timer_init.h"
+#include "app/adc_init.h"
+
 
 void MotorControlTask(void *parameters)
 {
@@ -53,6 +56,9 @@ void MotorControlTask(void *parameters)
 void SensorTask(void *parameters)
 {
     (void)parameters;
+    prvADCInit();
+    powerTimerInit();
+
     for (;;)
     {
         SensorManager_Poll();

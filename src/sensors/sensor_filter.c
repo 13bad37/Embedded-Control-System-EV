@@ -21,12 +21,12 @@ void SensorFilter_Update(const EvSensorData_t *raw, EvSensorData_t *filtered)
 }
 
 
-int32_t Filter_ApplyMovingAverage(MovingAverageFilter_t *filter, int32_t newSample)
+int32_t Filter_ApplyMovingAverage(MovingAverageFilter_t *filter, int32_t newSample, uint8_t size)
 {
     filter->buffer[filter->index] = newSample;
-    filter->index = (filter->index + 1) % 8;
+    filter->index = (filter->index + 1) % size;
 
-    if (filter->count < 8)
+    if (filter->count < size)
     {
         filter->count++;
     }
@@ -40,34 +40,24 @@ int32_t Filter_ApplyMovingAverage(MovingAverageFilter_t *filter, int32_t newSamp
     return (int32_t)(sum / (int64_t)filter->count);
 }
 
-uint16_t Vl53l0xSensor_Median3(uint16_t a, uint16_t b, uint16_t c)
+uint16_t Vl53l0xSensor_Median5(uint16_t a, uint16_t b, uint16_t c, uint16_t d, uint16_t e)
 {
     uint16_t temp;
-
-    if (a > b)
+    uint16_t arr[5] = {a, b, c, d, e};
+    for (int i = 0; i < 4; i++)
     {
-        temp = a;
-        a = b;
-        b = temp;
+        for (int j = 0; j < 4 - i; j++)
+        {
+            if (arr[j] > arr[j+1])
+            {
+                temp = arr[j];
+                arr[j] = arr[j+1];
+                arr[j+1] = temp;
+            }
+        }
     }
-
-    if (b > c)
-    {
-        temp = b;
-        b = c;
-        c = temp;
-    }
-
-    if (a > b)
-    {
-        temp = a;
-        a = b;
-        b = temp;
-    }
-
-    return b;
+    return arr[2];  // middle element
 }
-
 
 uint16_t Vl53l0xSensor_UpdateFilter(uint16_t rawDistanceMm)
 {
@@ -90,7 +80,9 @@ uint16_t Vl53l0xSensor_UpdateFilter(uint16_t rawDistanceMm)
     }
     else
     {
-        return Vl53l0xSensor_Median3(s_filterBuffer[0], s_filterBuffer[1], s_filterBuffer[2]);
+        return Vl53l0xSensor_Median5(
+            s_filterBuffer[0], s_filterBuffer[1], s_filterBuffer[2],
+            s_filterBuffer[3], s_filterBuffer[4]
+        );
     }
-
 }
