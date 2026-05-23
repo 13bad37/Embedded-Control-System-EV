@@ -86,6 +86,7 @@ EvMotorState_t g_currentState = EV_MOTOR_STATE_IDLE;
 EvMotorState_t g_lastState = EV_MOTOR_STATE_IDLE;
 bool configUpdateRequest = false;
 bool clockUpdateRequest = true;
+bool nightConditions = false;
 
 //for testing
 enum MotorStates {
@@ -364,6 +365,7 @@ void UpdateConfigPage() {
         if(g_ui32LastConfig != 0) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Motor Speed: ", -1, 5, 62, 0);
+            GrStringDraw(&sContext, "Motor State: ", -1, 5, 77, 0);
             GrStringDraw(&sContext, "Desired Speed", -1, 5, 130, 0);
             GrStringDraw(&sContext, "Power Threshold", -1, 5, 150, 0);
             WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)g_psSliders);
@@ -379,11 +381,30 @@ void UpdateConfigPage() {
             g_ui32LastConfig = g_ui32CurrentConfig;
         }
         tRectangle configClearRect1 = {100, 62, 160, 78};
+        tRectangle configClearRect2 = {100, 77, 200, 93};
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &configClearRect1);
+        GrRectFill(&sContext, &configClearRect2);
         GrContextForegroundSet(&sContext, ClrWhite);
         usprintf(configBuf, "%drpm", sensorData.motor_speed_rpm);
         GrStringDraw(&sContext, configBuf, -1, 100, 62, 0);
+        switch (g_currentState) {
+            case EV_MOTOR_STATE_IDLE:
+                GrStringDraw(&sContext, "Idle", -1, 100, 77, 0);
+                break;
+            case EV_MOTOR_STATE_STARTING: 
+                GrStringDraw(&sContext, "Starting", -1, 100, 77, 0);
+                break;
+            case EV_MOTOR_STATE_RUNNING:
+                GrStringDraw(&sContext, "Running", -1, 100, 77, 0);
+                break;
+            case EV_MOTOR_STATE_ESTOP_BRAKING:
+                GrStringDraw(&sContext, "EStop Braking", -1, 100, 77, 0);
+                break;
+            case EV_MOTOR_STATE_FAULT_LATCHED:
+                GrStringDraw(&sContext, "Fault Latched", -1, 100, 77, 0);
+                break;
+        }
     } 
     else if(g_ui32CurrentConfig == 1) {
         if(g_ui32LastConfig != 1) {
@@ -792,6 +813,19 @@ void GuiDashboard_Update(void)
 {
     EvMotorState_t motorState = MotorControl_GetState();
     g_currentState = motorState;
+
+    EvSensorData_t tempSensorData = SensorManager_GetFilteredData();
+    if(tempSensorData.ambient_light_lux >= 5) {
+        if(nightConditions) {
+            GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, 0x0);
+            nightConditions = false;
+        }        
+    } else {
+        if(!nightConditions) {
+            GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0, GPIO_PIN_0);
+            nightConditions = true;
+        }
+    }
 
     // if(g_currentState != g_lastState) {
     //     UpdateBanner();
