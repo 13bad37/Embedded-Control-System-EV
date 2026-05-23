@@ -80,6 +80,7 @@ void OnConfigButtonPress(tWidget *psWidget);
 void OnThresholdButtonPress(tWidget *psWidget);
 extern tCanvasWidget g_psPanels[];
 uint32_t g_ui32CurrentPlot = 10;
+uint32_t g_ui32LastPlot = 6;
 uint32_t g_ui32CurrentConfig = 0;
 uint32_t g_ui32LastConfig = 0;
 EvMotorState_t g_currentState = EV_MOTOR_STATE_IDLE;
@@ -325,17 +326,43 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext) {
 }
 
 void UpdatePlotAxes() {
-    if(g_ui32CurrentPlot >= NUM_PLOT_BUTTONS) return;
-    usprintf(plotBuf, "%d", g_max_values[g_ui32CurrentPlot]);
-    GrContextFontSet(&sContext, &g_sFontCm16);    
     tRectangle limitRect = {260, 58, 320, 72};
+    tRectangle labelRect = {260, 130, 320, 140};
     GrContextForegroundSet(&sContext, ClrBlack);
     GrRectFill(&sContext, &limitRect);
+    GrRectFill(&sContext, &labelRect);
+
+    usprintf(plotBuf, "%d", g_ui32CurrentPlot == 10? 1000: g_max_values[g_ui32CurrentPlot]);
+    GrContextFontSet(&sContext, &g_sFontCm16);
     GrContextForegroundSet(&sContext, ClrSilver);
     GrStringDrawCentered(&sContext, plotBuf, -1, 273, 62, 0);
     GrStringDrawCentered(&sContext, "0", -1, 265, 200, 0);
-    GrStringDrawCentered(&sContext, "0s", -1, 60, 210, 0);
-    GrStringDrawCentered(&sContext, "10s", -1, 260, 210, 0);
+    GrStringDrawCentered(&sContext, "0", -1, 60, 210, 0);
+    GrStringDrawCentered(&sContext, "10", -1, 260, 210, 0);
+
+    GrContextFontSet(&sContext, &g_sFontFixed6x8);
+    GrStringDrawCentered(&sContext, "Time (s)", -1, 160, 210, 0);
+    switch(g_ui32CurrentPlot) {
+        case 0:
+            GrStringDraw(&sContext, "Speed(rpm)", -1, 260, 130, 0);
+            break;
+        case 1:
+            GrStringDraw(&sContext, "Power(W)", -1, 260, 130, 0);
+            break;
+        case 2:
+            GrStringDraw(&sContext, "Light(lux)", -1, 260, 130, 0);
+            break;
+        case 3:
+            GrStringDraw(&sContext, "Temp.(C)", -1, 260, 130, 0);
+            break;
+        case 4:
+            GrStringDraw(&sContext, "Humi.(%)", -1, 260, 130, 0);
+            break;
+        case 5:
+            GrStringDraw(&sContext, "Dist.(mm)", -1, 260, 130, 0);
+            break;
+    }
+
     graphX = 1;
     tRectangle clearRect = {61, 63, 258, 200};
     GrContextForegroundSet(&sContext, ClrBlack);
