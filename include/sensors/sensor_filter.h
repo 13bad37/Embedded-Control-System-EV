@@ -11,7 +11,7 @@ typedef struct {
 void SensorFilter_Init(void);
 void SensorFilter_Update(const EvSensorData_t *raw, EvSensorData_t *filtered);
 
-int32_t Filter_ApplyMovingAverage(MovingAverageFilter_t *filter, int32_t newSample);
+int32_t Filter_ApplyMovingAverage(MovingAverageFilter_t *filter, int32_t newSample, uint8_t size);
 
 uint16_t Vl53l0xSensor_UpdateFilter(uint16_t rawDistanceMm);
 

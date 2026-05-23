@@ -19,10 +19,22 @@ void SerialPlotter_SendMotorFrame(const EvMotorStatus_t *status)
     //    (int)status->pwm_duty_per_mille);
 }
 
-void SerialPlotter_SendSensorFrame(const EvSensorData_t *raw, const EvSensorData_t *filtered)
+void SerialPlotter_SendSensorFrame(const EvSensorDataRaw_t *raw, const EvSensorData_t *filtered)
 {
     if (raw == NULL || filtered == NULL) { return; }
-    /* TODO: add sensor channels once sensor data is available */
+    UARTprintf("RawLux:%d FilteredLux:%d RawTempC:%d FilteredTempC:%d RawHumidPct:%d FilteredHumidPct:%d RawDistanceMm:%d FilteredDistanceMm:%d, RawRpm:%d FilteredRpm:%d, rawPower:%d, FilteredPower:%d\n",
+                raw->lux,
+                filtered->ambient_light_lux,
+                raw->temperatureC,
+                filtered->cabin_temperature_c_x10,
+                raw->humidityRh,
+                filtered->cabin_humidity_rh_x10,
+                raw->distanceMm,
+                filtered->distance_mm,
+                raw->motor_speed_rpm,
+                filtered->motor_speed_rpm,
+                raw->motor_power_w,
+                filtered->motor_power_w);
     (void)raw;
     (void)filtered;
 }

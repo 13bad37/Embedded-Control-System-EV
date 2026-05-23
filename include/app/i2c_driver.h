@@ -16,5 +16,5 @@
 
 
 
-void I2C_Driver_Init(uint32_t sysClockFreq);
+//void I2C_Driver_Init(uint32_t sysClockFreq);
 void I2C2_Driver_Init(uint32_t sysClockFreq);

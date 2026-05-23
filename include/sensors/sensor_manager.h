@@ -6,15 +6,7 @@
 
 void SensorManager_Init(void);
 void SensorManager_Poll(void);
-typedef struct
-{
-    uint32_t lux;
-    uint32_t temperatureC;
-    uint32_t humidityRh;
-    uint32_t distanceMm;
-    uint32_t motor_speed_rpm;
-    uint32_t motor_power_w;
-} EvSensorDataRaw_t;
+
 
 typedef enum {
     SENSOR_MSG_SPEED,

@@ -25,8 +25,8 @@ void powerTimerInit(void)
     TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
  
 
-    uint32_t loadVal = SysCtlClockGet() / 150 ; //every 150Hz
-    TimerLoadSet(TIMER2_BASE, TIMER_A, loadVal - 1);
+
+    TimerLoadSet(TIMER2_BASE, TIMER_A, 800000); //150hz
  
     TimerControlTrigger(TIMER2_BASE, TIMER_A, true); 
     TimerADCEventSet(TIMER2_BASE, TIMER_ADC_TIMEOUT_A); //tell to trigger which ADC
