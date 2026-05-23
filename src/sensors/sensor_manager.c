@@ -52,6 +52,8 @@ void SensorManager_Init(void)
 
 EvSensorDataRaw_t SensorManager_GetRawData(void)
 {
+    static uint32_t rawAdc0 = 0;
+    static uint32_t rawAdc1 = 0;
     SensorMsg_t msg;
     while (xQueueReceive(rawdataQueue, &msg, 0) == pdTRUE)
     {
@@ -62,7 +64,25 @@ EvSensorDataRaw_t SensorManager_GetRawData(void)
             case SENSOR_MSG_TEMP: s_rawData.temperatureC = msg.value; break;
             case SENSOR_MSG_HUMID: s_rawData.humidityRh = msg.value; break;
             case SENSOR_MSG_SPEED: s_rawData.motor_speed_rpm = msg.value; break;
-            case SENSOR_MSG_POWER: s_rawData.motor_power_w   = msg.value; break;
+            case SENSOR_MSG_POWERA: 
+                rawAdc0 = msg.value;
+                break;
+
+            case SENSOR_MSG_POWERB:
+                rawAdc1 = msg.value;
+                
+                int32_t rawA = (int32_t)rawAdc0 - 200;
+                int32_t rawB = (int32_t)rawAdc1 - 200;
+                
+                float vA = ((float)rawA / POWER_ADC_RESOLUTION) * POWER_VREF_V;
+                float vB = ((float)rawB / POWER_ADC_RESOLUTION) * POWER_VREF_V;
+                
+                float iA = vA / (POWER_CSA_GAIN * POWER_SHUNT_OHM);
+                float iB = vB / (POWER_CSA_GAIN * POWER_SHUNT_OHM);
+                
+                float iTotal = (iA + iB) * 1.5f; 
+                s_rawData.motor_power_w = (uint32_t)(POWER_SUPPLY_V * iTotal);
+                break;
         }
     }
     return s_rawData;
