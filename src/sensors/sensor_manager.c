@@ -10,7 +10,6 @@
 
 #include "sensors/sensor_filter.h"
 #include "sensors/ambient_light_sensor.h"
-#include "sensors/hall_speed_sensor.h"
 #include "sensors/motor_power_sensor.h"
 #include "sensors/sensor_filter.h"
 #include "sensors/sht31_sensor.h"

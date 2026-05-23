@@ -23,9 +23,6 @@
 
 #include "motor/motor_state_machine.h"
 
-
-//extern EvSensorDataRaw_t s_rawData;
-
 uint32_t motor_power_w;
 static uint32_t adcBuf[2];
 
@@ -35,8 +32,6 @@ void MotorPower_ADC_ISR(void)
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
     ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf);
-
-    //ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples 
     
     SensorMsg_t msg = { .type = SENSOR_MSG_POWERA, .value = (uint32_t)adcBuf[0] };
     if (rawdataQueue != NULL)

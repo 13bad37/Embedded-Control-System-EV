@@ -62,7 +62,6 @@ void Vl53l0xSensor_Sample(void)
 
     distanceMm = ((uint16_t)rxData[0] << 8) | rxData[1];
 
-    /* Reject invalid readings */
     if (distanceMm == 0 || distanceMm >= VL53L0X_INVALID_DISTANCE_MM)
     {
         return;

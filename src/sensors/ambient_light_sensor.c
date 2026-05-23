@@ -14,7 +14,6 @@
 
 #define OPT3001_SAMPLE_PERIOD_MS          500
 
-//extern EvSensorDataRaw_t s_rawData;
 
 static TickType_t s_lastSampleTick;
 

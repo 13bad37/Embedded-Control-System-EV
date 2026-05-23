@@ -14,7 +14,7 @@
 #include "driverlib/interrupt.h"
 #include "driverlib/pin_map.h"
 #include "app/power_timer_init.h"
-#include "sensors/hall_speed_sensor.h"
+
 
 
 void powerTimerInit(void)
