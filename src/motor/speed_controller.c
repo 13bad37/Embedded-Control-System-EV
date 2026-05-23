@@ -34,7 +34,7 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
 {
     float error = (float)((int32_t)reference_rpm - (int32_t)measured_rpm);
 
-    if (error > -500.0f && error < 500.0f)
+    if (error > -800.0f && error < 800.0f)
     {
         s_pi.integral += error * (PROJECT_MOTOR_TASK_PERIOD_MS / 1000.0f);
         if (s_pi.integral > PI_INTEGRAL_MAX) { s_pi.integral = PI_INTEGRAL_MAX; }
@@ -42,7 +42,7 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
     }
 
     float correction = (s_pi.kp * error) + (s_pi.ki * s_pi.integral);
-    float feedforward = (reference_rpm > 200U) ? 15.0f : 0.0f;
+    float feedforward = ((float)reference_rpm / 1100.0f) * 15.0f;
     float output = feedforward + correction;
 
 

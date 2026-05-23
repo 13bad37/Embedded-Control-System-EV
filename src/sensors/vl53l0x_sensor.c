@@ -13,6 +13,7 @@
 #include "utils/uartstdio.h"
 #include "common/project_config.h"
 #include "rtos/message_bus.h"
+#include "motor/motor_control.h"
 
 #define VL53L0X_I2C_ADDRESS             0x29
 #define VL53L0X_REG_SYSRANGE_START      0x00
@@ -23,18 +24,13 @@
 #define VL53L0X_START_CONTINUOUS        0x02
 #define VL53L0X_CLEAR_INTERRUPT         0x01
 
-#define VL53L0X_SAMPLE_PERIOD_MS        50   // 20hz or higher  1000/50 = 20
+#define VL53L0X_SAMPLE_PERIOD_MS        50
 #define VL53L0X_INVALID_DISTANCE_MM     8190
 #define VL53L0X_ESTOP_DISTANCE_MM       300U
 #define VL53L0X_NOISE_FLOOR_MM          30U
 
-
-
 static TickType_t s_lastSampleTick;
-
-
-static bool     s_estopFired = false;
-
+static bool       s_estopFired = false;
 
 void Vl53l0xSensor_Init(void)
 {
@@ -44,8 +40,8 @@ void Vl53l0xSensor_Init(void)
 void Vl53l0xSensor_Sample(void)
 {
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-    uint8_t   rxData[2] = {0};
-    uint16_t  distanceMm;
+    uint8_t    rxData[2] = {0};
+    uint16_t   distanceMm;
     TickType_t currentTick = xTaskGetTickCount();
 
     if ((currentTick - s_lastSampleTick) < pdMS_TO_TICKS(VL53L0X_SAMPLE_PERIOD_MS))
@@ -89,13 +85,22 @@ void Vl53l0xSensor_Sample(void)
         }
 
         SensorMsg_t msg = { .type = SENSOR_MSG_DISTANCE, .value = (uint32_t)distanceMm };
-
         xQueueSendToBack(rawdataQueue, &msg, 0);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-        
-
-
         writeI2C_VL53L0X_Byte(VL53L0X_I2C_ADDRESS, VL53L0X_REG_INTERRUPT_CLEAR, VL53L0X_CLEAR_INTERRUPT);
     }
+    else
+    {
+        /* Distance is clear — reset latch when system is idle or starting */
+        if (MotorControl_GetState() == EV_MOTOR_STATE_IDLE ||
+            MotorControl_GetState() == EV_MOTOR_STATE_STARTING)
+        {
+            s_estopFired = false;
+        }
 
+        SensorMsg_t msg = { .type = SENSOR_MSG_DISTANCE, .value = (uint32_t)distanceMm };
+        xQueueSendToBack(rawdataQueue, &msg, 0);
+        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        writeI2C_VL53L0X_Byte(VL53L0X_I2C_ADDRESS, VL53L0X_REG_INTERRUPT_CLEAR, VL53L0X_CLEAR_INTERRUPT);
+    }
 }
