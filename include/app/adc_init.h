@@ -12,4 +12,3 @@
 #define POWER_ADC_CH_B              ADC_CTL_CH4     // AIN4
 
 void prvADCInit(void);
-void TriggerPowerADC(void);

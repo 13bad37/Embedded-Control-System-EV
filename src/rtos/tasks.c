@@ -19,6 +19,7 @@
 #include "driverlib/gpio.h"
 #include "app/power_timer_init.h"
 #include "app/adc_init.h"
+#include "sensors/motor_power_sensor.h"
 
 
 void MotorControlTask(void *parameters)
@@ -61,7 +62,7 @@ void SensorTask(void *parameters)
 
     for (;;)
     {
-        TriggerPowerADC();
+        MotorPowerSensor_Sample();
         SensorManager_Poll();
         vTaskDelay(pdMS_TO_TICKS(PROJECT_SENSOR_TASK_PERIOD_MS));
     }

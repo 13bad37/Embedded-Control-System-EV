@@ -38,14 +38,6 @@ void prvADCInit(void)
     ADCSequenceStepConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER, 0,
                              POWER_ADC_CH_A);
     ADCSequenceStepConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER, 1,
-                             POWER_ADC_CH_B | ADC_CTL_IE | ADC_CTL_END);                 
-    ADCIntEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
-    IntEnable(INT_ADC1SS2);
-    IntPrioritySet(INT_ADC1SS2, 0xE0);
+                             POWER_ADC_CH_B | ADC_CTL_END);                 
     ADCSequenceEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
-}
-
-void TriggerPowerADC(void)
-{
-    ADCProcessorTrigger(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
 }

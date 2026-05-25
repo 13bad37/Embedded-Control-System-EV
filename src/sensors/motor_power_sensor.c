@@ -26,20 +26,32 @@
 uint32_t motor_power_w;
 static uint32_t adcBuf[2];
 
-void MotorPower_ADC_ISR(void)
+void MotorPowerSensor_Sample(void)
 {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    // Disable the touchscreen interrupt (ADC0SS3) to prevent the touchscreen
+    // from switching GPIOs and causing heavy VDD/GND sag while we are sampling
+    // the motor power ADCs. This perfectly eliminates the noise coupling!
+    IntDisable(INT_ADC0SS3);
+
+    ADCProcessorTrigger(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
+    while(!ADCIntStatus(POWER_ADC_BASE, POWER_ADC_SEQUENCER, false));
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
     ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples
+
+    // Re-enable the touchscreen interrupt now that analog sampling is complete
+    IntEnable(INT_ADC0SS3);
 
     if (rawdataQueue != NULL)
     {
         SensorMsg_t msgA = { .type = SENSOR_MSG_POWERA, .value = adcBuf[0] };
         SensorMsg_t msgB = { .type = SENSOR_MSG_POWERB, .value = adcBuf[1] };
 
-        /* Keep the ISR short; the sensor task can do the maths + filtering. */
-        xQueueSendToBackFromISR(rawdataQueue, &msgA, &xHigherPriorityTaskWoken);
-        xQueueSendToBackFromISR(rawdataQueue, &msgB, &xHigherPriorityTaskWoken);
-        portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+        xQueueSendToBack(rawdataQueue, &msgA, 0);
+        xQueueSendToBack(rawdataQueue, &msgB, 0);
     }
+}
+
+void MotorPower_ADC_ISR(void)
+{
+    // Unused, polling approach is used for synchronous sampling
 }

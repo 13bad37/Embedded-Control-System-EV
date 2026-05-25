@@ -26,6 +26,7 @@ float MotorPowerSensor_GetRawPowerW(void);
 
 bool MotorPowerSensor_IsOvercurrent(void);
 
-void MotorPower_ADC_ISR(void);
+void MotorPowerSensor_Sample(void);
 
+void MotorPower_ADC_ISR(void);
 #endif // MOTOR_POWER_SENSOR_H
