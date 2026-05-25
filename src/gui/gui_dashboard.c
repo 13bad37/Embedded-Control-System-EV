@@ -65,6 +65,7 @@ char configBuf[20];
 char configBuf2[20];
 char configBuf3[20];
 
+
 static void prvGUITask( void *pvParameters );
 void OnPrevious(tWidget *psWidget);
 void OnNext(tWidget *psWidget);
@@ -416,7 +417,7 @@ void OnSensorPlotsPaint(tWidget *psWidget, tContext *psContext) {
     UpdatePlotAxes();
 }
 
-void UpdateConfigPage() {
+void UpdateConfigPage(bool newOpen) {
     if(g_ui32Panel != 1) return;
     EvSensorData_t sensorData = SensorManager_GetFilteredData();
     GrContextFontSet(&sContext, &g_sFontCm16);
@@ -433,7 +434,7 @@ void UpdateConfigPage() {
     }
 
     if(g_ui32CurrentConfig == 0) {
-        if(g_ui32LastConfig != 0) {
+        if(g_ui32LastConfig != 0 || newOpen) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Motor Speed: ", -1, 5, 62, 0);
             GrStringDraw(&sContext, "Motor State: ", -1, 5, 77, 0);
@@ -443,14 +444,14 @@ void UpdateConfigPage() {
             usprintf(configBuf2, "%d", g_thresholds[0]);
             SliderTextSet((tSliderWidget *)(g_psSliders), configBuf2);
             SliderValueSet((tSliderWidget *)(g_psSliders), g_thresholds[0]);
-            WidgetPaint((tWidget *)g_psSliders);
             WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)(g_psSliders + 1));
             usprintf(configBuf3, "%d", g_thresholds[1]);
             SliderTextSet((tSliderWidget *)(g_psSliders + 1), configBuf3);
             SliderValueSet((tSliderWidget *)(g_psSliders + 1), g_thresholds[1]);
-            WidgetPaint((tWidget *)(g_psSliders + 1));            
             g_ui32LastConfig = g_ui32CurrentConfig;
         }
+        WidgetPaint((tWidget *)g_psSliders);
+        WidgetPaint((tWidget *)(g_psSliders + 1)); 
         tRectangle configClearRect1 = {100, 62, 160, 78};
         tRectangle configClearRect2 = {100, 77, 200, 93};
         GrContextForegroundSet(&sContext, ClrBlack);
@@ -478,7 +479,7 @@ void UpdateConfigPage() {
         }
     } 
     else if(g_ui32CurrentConfig == 1) {
-        if(g_ui32LastConfig != 1) {
+        if(g_ui32LastConfig != 1 || newOpen) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Nearest Object: ", -1, 5, 62, 0);
             GrStringDraw(&sContext, "Distance Threshold", -1, 5, 150, 0);
@@ -486,9 +487,9 @@ void UpdateConfigPage() {
             usprintf(configBuf2, "%d", g_thresholds[2]);
             SliderTextSet((tSliderWidget *)(g_psSliders + 2), configBuf2);
             SliderValueSet((tSliderWidget *)(g_psSliders + 2), g_thresholds[2]);
-            WidgetPaint((tWidget *)(g_psSliders + 2));
             g_ui32LastConfig = g_ui32CurrentConfig;
         }
+        WidgetPaint((tWidget *)(g_psSliders + 2));
         tRectangle configClearRect1 = {110, 62, 165, 75};
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &configClearRect1);
@@ -497,7 +498,7 @@ void UpdateConfigPage() {
         GrStringDraw(&sContext, configBuf, -1, 115, 62, 0);
     } 
     else if(g_ui32CurrentConfig == 2) {
-        if(g_ui32LastConfig != 2) {
+        if(g_ui32LastConfig != 2 || newOpen) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Current Temperature: ", -1, 5, 62, 0);
             GrStringDraw(&sContext, "Relative Humidity: ", -1, 5, 77, 0);
@@ -507,9 +508,9 @@ void UpdateConfigPage() {
             usprintf(configBuf2, "%d", g_thresholds[3]);
             SliderTextSet((tSliderWidget *)(g_psSliders + 3), configBuf2);
             SliderValueSet((tSliderWidget *)(g_psSliders + 3), g_thresholds[3]);
-            WidgetPaint((tWidget *)(g_psSliders + 3));
             g_ui32LastConfig = g_ui32CurrentConfig;
         }
+        WidgetPaint((tWidget *)(g_psSliders + 3));
         tRectangle configClearRect1 = {160, 62, 190, 75};
         tRectangle configClearRect2 = {140, 77, 170, 90};
         tRectangle configClearRect3 = {63, 92, 85, 105};
@@ -554,7 +555,7 @@ void OnThresholdButtonPress(tWidget *psWidget){
 }
 
 void OnConfigurationPaint(tWidget *psWidget, tContext *psContext) {
-    // UpdateConfigPage();
+    UpdateConfigPage(true);
 }
 
 static void HandleConfigButtonPress(uint32_t ui32Idx) {
@@ -593,13 +594,13 @@ void OnFaultLatched(void) {
     WidgetAdd(WIDGET_ROOT, (tWidget *)g_psPanels);
     WidgetPaint((tWidget *)g_psPanels);
     WidgetRemove((tWidget *)&g_psStartStopButton);
-    WidgetRemove((tWidget *)&g_sNext);
-    WidgetRemove((tWidget *)&g_sPrevious);
+    WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sNext);
+    WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sPrevious);
     WidgetAdd((tWidget *)g_psPanels, (tWidget *)&g_psFaultAcknowledgeButton);
     WidgetPaint((tWidget *)&g_psFaultAcknowledgeButton);
-    PushButtonImageOff(&g_sNext);
-    PushButtonTextOff(&g_sNext);
-    PushButtonFillOn(&g_sNext);
+    PushButtonImageOn(&g_sNext);
+    PushButtonTextOn(&g_sNext);
+    PushButtonFillOff(&g_sNext);
     WidgetPaint((tWidget *)&g_sNext);
     PushButtonImageOff(&g_sPrevious);
     PushButtonTextOff(&g_sPrevious);
@@ -798,7 +799,7 @@ void UpdateBanner() {
 }
 
 void OnSliderChange(tWidget *psWidget, int32_t i32Value) {
-    static char pcSliderText[5];
+    static char pcSliderText[4][5];
     uint32_t ui32Idx;
     for(ui32Idx = 0; ui32Idx < NUM_SLIDERS; ui32Idx++) {
         if(psWidget == (tWidget *)(g_psSliders + ui32Idx)) {
@@ -807,12 +808,12 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value) {
     }
     if(ui32Idx == NUM_SLIDERS) return;
     g_temp_thresholds[ui32Idx] = i32Value;
-    usprintf(pcSliderText, "%3d", i32Value);
-    SliderTextSet((tSliderWidget *)psWidget, pcSliderText);
+    usprintf(pcSliderText[ui32Idx], "%3d", i32Value);
+    SliderTextSet((tSliderWidget *)psWidget, pcSliderText[ui32Idx]);
 
     /* Btn/slider cbs just mark state. LCD drawing stays in the UI task. */
-    configUpdateRequest = true;
-    RequestUiWork(GUI_REQ_NONE);
+    // configUpdateRequest = true;
+    // RequestUiWork(GUI_REQ_NONE);
 }
 
 void ClockUpdate() {
@@ -895,7 +896,7 @@ static void prvGUITask( void *pvParameters ) {
         }
 
         if(configUpdateRequest) {
-            UpdateConfigPage();
+            UpdateConfigPage(false);
             configUpdateRequest = false;
         }
 
