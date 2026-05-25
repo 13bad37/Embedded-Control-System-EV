@@ -26,20 +26,28 @@
 uint32_t motor_power_w;
 static uint32_t adcBuf[2];
 
+#define POWER_ADC_POLL_LIMIT 100000U
+
 void MotorPowerSensor_Sample(void)
 {
-    // Disable the touchscreen interrupt (ADC0SS3) to prevent the touchscreen
-    // from switching GPIOs and causing heavy VDD/GND sag while we are sampling
-    // the motor power ADCs. This perfectly eliminates the noise coupling!
-    IntDisable(INT_ADC0SS3);
+    uint32_t pollCount = POWER_ADC_POLL_LIMIT;
 
+    /* Touch runs on ADC0/timer; this ADC1 sequence runs only when asked here. */
+    ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
     ADCProcessorTrigger(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
-    while(!ADCIntStatus(POWER_ADC_BASE, POWER_ADC_SEQUENCER, false));
+    while ((ADCIntStatus(POWER_ADC_BASE, POWER_ADC_SEQUENCER, false) == 0U) &&
+           (pollCount > 0U))
+    {
+        pollCount--;
+    }
+
+    if (pollCount == 0U)
+    {
+        return;
+    }
+
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
     ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples
-
-    // Re-enable the touchscreen interrupt now that analog sampling is complete
-    IntEnable(INT_ADC0SS3);
 
     if (rawdataQueue != NULL)
     {
@@ -53,5 +61,6 @@ void MotorPowerSensor_Sample(void)
 
 void MotorPower_ADC_ISR(void)
 {
-    // Unused, polling approach is used for synchronous sampling
+    /* Kept for the startup vector; task sampling leaves this interrupt masked. */
+    ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
 }

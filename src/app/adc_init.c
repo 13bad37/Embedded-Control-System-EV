@@ -37,7 +37,11 @@ void prvADCInit(void)
     // Step 0: sample ISENA (AIN0)
     ADCSequenceStepConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER, 0,
                              POWER_ADC_CH_A);
+    /*
+     * The task polls the raw completion bit. IE raises that bit, while leaving
+     * the ADC interrupt masked keeps this path out of the ISR.
+     */
     ADCSequenceStepConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER, 1,
-                             POWER_ADC_CH_B | ADC_CTL_END);                 
+                             POWER_ADC_CH_B | ADC_CTL_IE | ADC_CTL_END);
     ADCSequenceEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
 }

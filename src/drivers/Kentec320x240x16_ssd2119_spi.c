@@ -348,6 +348,11 @@ InitSPILCDInterface(uint32_t ui32SysClock)
     SysCtlPeripheralEnable(LCD_LED_PERIPH);
     SysCtlPeripheralEnable(LCD_CS_PERIPH);
 
+    // TM4C1294 at 120MHz requires waiting for the peripheral to be ready
+    while(!SysCtlPeripheralReady(LCD_RST_PERIPH)) {}
+    while(!SysCtlPeripheralReady(LCD_LED_PERIPH)) {}
+    while(!SysCtlPeripheralReady(LCD_CS_PERIPH)) {}
+
     //
     // Change PP3 into GPIO output for LCD_SCS
     // Change PP4 into GPIO output for LCD_SDC

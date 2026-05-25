@@ -43,7 +43,6 @@ void Vl53l0xSensor_Sample(void)
     uint8_t   rxData[2] = {0};
     uint16_t  distanceMm;
     TickType_t currentTick = xTaskGetTickCount();
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     if ((currentTick - s_lastSampleTick) < pdMS_TO_TICKS(VL53L0X_SAMPLE_PERIOD_MS)){return;}
     s_lastSampleTick = currentTick;
 
@@ -72,8 +71,7 @@ void Vl53l0xSensor_Sample(void)
 
         if (rawdataQueue != NULL)
         {
-            xQueueSendToBack(rawdataQueue, &msg, &xHigherPriorityTaskWoken);
-            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+            xQueueSendToBack(rawdataQueue, &msg, 0);
         }
         writeI2C_VL53L0X_Byte(VL53L0X_I2C_ADDRESS, VL53L0X_REG_INTERRUPT_CLEAR, VL53L0X_CLEAR_INTERRUPT);
 }

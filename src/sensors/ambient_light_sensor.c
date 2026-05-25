@@ -31,7 +31,6 @@ void AmbientLightSensor_Init(void)
 
 void AmbientLightSensor_Sample(void)
 {
-    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     uint16_t rawData = 0;
     float convertedLux = 0;
     TickType_t currentTick;
@@ -48,8 +47,7 @@ void AmbientLightSensor_Sample(void)
         SensorMsg_t msg = { .type = SENSOR_MSG_LIGHT, .value = (uint32_t)convertedLux };
         if (rawdataQueue != NULL)
         {
-            xQueueSendToBack(rawdataQueue, &msg, &xHigherPriorityTaskWoken);
-            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+            xQueueSendToBack(rawdataQueue, &msg, 0);
         }
     }
 }

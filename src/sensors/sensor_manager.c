@@ -156,6 +156,8 @@ void SensorManager_Poll(void)
     AmbientLightSensor_Sample();
     Sht31Sensor_Sample();
     Vl53l0xSensor_Sample();
+    /* Pull in this cycle's queued values before updating what the UI plots. */
+    (void)SensorManager_GetRawData();
     s_rawData.motor_speed_rpm = MotorDriver_GetRpm();
     updateFilter();
     SensorManager_CheckThresholds();
