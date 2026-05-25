@@ -57,10 +57,11 @@ void SensorTask(void *parameters)
 {
     (void)parameters;
     prvADCInit();
-    powerTimerInit();
+    // powerTimerInit(); // Removed to prevent global timer trigger conflict
 
     for (;;)
     {
+        TriggerPowerADC();
         SensorManager_Poll();
         vTaskDelay(pdMS_TO_TICKS(PROJECT_SENSOR_TASK_PERIOD_MS));
     }

@@ -26,10 +26,15 @@ void prvADCInit(void)
     GPIOPinTypeADC(POWER_ADC_PORT_B, POWER_ADC_PIN_B);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_ADC1);
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_ADC1));
-
+    // Use hardware oversampling x4 to further reduce switching noise
+    // Each reported sample is average of 4 hardware conversions
     ADCHardwareOversampleConfigure(POWER_ADC_BASE, 4);
+
+    // tell the ADC to be triggered by the processor
     ADCSequenceConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER,
-                         ADC_TRIGGER_TIMER, 0);
+                         ADC_TRIGGER_PROCESSOR, 0);
+
+    // Step 0: sample ISENA (AIN0)
     ADCSequenceStepConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER, 0,
                              POWER_ADC_CH_A);
     ADCSequenceStepConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER, 1,
@@ -38,4 +43,9 @@ void prvADCInit(void)
     IntEnable(INT_ADC1SS2);
     IntPrioritySet(INT_ADC1SS2, 0xE0);
     ADCSequenceEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
+}
+
+void TriggerPowerADC(void)
+{
+    ADCProcessorTrigger(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
 }
