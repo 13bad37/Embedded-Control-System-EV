@@ -5,7 +5,7 @@
 #define PI_KI               0.008f
 #define PI_INTEGRAL_MAX     3.0f
 #define PI_INTEGRAL_MIN    -3.0f
-#define PI_OUTPUT_MAX       25U     /* reduced from 50 — prevents overcurrent */
+#define PI_OUTPUT_MAX       28U     /* reduced from 50 — prevents overcurrent */
 #define PI_OUTPUT_MIN       0U
 
 typedef struct {
@@ -42,7 +42,7 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
     }
 
     float correction = (s_pi.kp * error) + (s_pi.ki * s_pi.integral);
-    float feedforward = ((float)reference_rpm / 1100.0f) * 15.0f;
+    float feedforward = ((float)reference_rpm / 1100.0f) * 18.0f;
     float output = feedforward + correction;
 
 
