@@ -28,7 +28,6 @@ static uint32_t adcBuf[2];
 
 void MotorPower_ADC_ISR(void)
 {
-    
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
     ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples
@@ -43,5 +42,4 @@ void MotorPower_ADC_ISR(void)
         xQueueSendToBackFromISR(rawdataQueue, &msgB, &xHigherPriorityTaskWoken);
         portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
     }
-
 }

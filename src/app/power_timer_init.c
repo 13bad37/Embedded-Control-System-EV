@@ -23,8 +23,6 @@ void powerTimerInit(void)
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_TIMER2));
  
     TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
- 
-
 
     TimerLoadSet(TIMER2_BASE, TIMER_A, 800000); //150hz
  

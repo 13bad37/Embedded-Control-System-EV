@@ -8,7 +8,6 @@
 #include "app/uart_driver.h"
 #include "app/fault_manager.h"
 #include "app/integration.h"
-#include "app/power_timer_init.h"
 #include "common/serial_plotter.h"
 #include "common/project_config.h"
 #include "driverlib/rom_map.h"
@@ -38,14 +37,9 @@ void SystemInit_ConfigureBoard(void)
                                             PROJECT_SYSTEM_CLOCK_HZ);
 
   
-    //I2C_Driver_Init(g_ui32SysClock);
     rawdataQueue = xQueueCreate(10, sizeof(SensorMsg_t));
-    //
     I2C2_Driver_Init(g_ui32SysClock);   
     UART_Driver_Init(g_ui32SysClock);
-    
-    //HallTimerInit();
-
     IntMasterEnable();
 }
 

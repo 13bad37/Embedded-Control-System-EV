@@ -28,10 +28,7 @@
 #define VL53L0X_ESTOP_DISTANCE_MM       300U
 #define VL53L0X_NOISE_FLOOR_MM          30U
 
-
-
 static TickType_t s_lastSampleTick;
-
 
 static bool     s_estopFired = false;
 
@@ -46,31 +43,15 @@ void Vl53l0xSensor_Sample(void)
     uint8_t   rxData[2] = {0};
     uint16_t  distanceMm;
     TickType_t currentTick = xTaskGetTickCount();
-
-    if ((currentTick - s_lastSampleTick) < pdMS_TO_TICKS(VL53L0X_SAMPLE_PERIOD_MS))
-    {
-        return;
-    }
+    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+    if ((currentTick - s_lastSampleTick) < pdMS_TO_TICKS(VL53L0X_SAMPLE_PERIOD_MS)){return;}
     s_lastSampleTick = currentTick;
 
-    if (!readI2C_VL53L0X(VL53L0X_I2C_ADDRESS,
-                          VL53L0X_REG_RESULT_RANGE_MM, rxData, 2))
-    {
-        return;
-    }
-
+    if (!readI2C_VL53L0X(VL53L0X_I2C_ADDRESS, VL53L0X_REG_RESULT_RANGE_MM, rxData, 2)){return;}
     distanceMm = ((uint16_t)rxData[0] << 8) | rxData[1];
-
-    if (distanceMm == 0 || distanceMm >= VL53L0X_INVALID_DISTANCE_MM)
-    {
-        return;
-    }
-
+    if (distanceMm == 0 || distanceMm >= VL53L0X_INVALID_DISTANCE_MM){return;}
     /* Filter out sensor noise floor */
-    if (distanceMm < VL53L0X_NOISE_FLOOR_MM)
-    {
-        return;
-    }
+    if (distanceMm < VL53L0X_NOISE_FLOOR_MM){return;}
 
     /* E-stop threshold — fire once, latch until clear */
     if (distanceMm < VL53L0X_ESTOP_DISTANCE_MM)
@@ -85,17 +66,14 @@ void Vl53l0xSensor_Sample(void)
                 xSemaphoreGive(sem);
             }
         }
-
-        SensorMsg_t msg = { .type = SENSOR_MSG_DISTANCE, .value = (uint32_t)distanceMm };
+       
+    }
+     SensorMsg_t msg = { .type = SENSOR_MSG_DISTANCE, .value = (uint32_t)distanceMm };
 
         if (rawdataQueue != NULL)
         {
-            xQueueSendToBack(rawdataQueue, &msg, 0);
+            xQueueSendToBack(rawdataQueue, &msg, &xHigherPriorityTaskWoken);
+            portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
         }
-        
-
-
         writeI2C_VL53L0X_Byte(VL53L0X_I2C_ADDRESS, VL53L0X_REG_INTERRUPT_CLEAR, VL53L0X_CLEAR_INTERRUPT);
-    }
-
 }

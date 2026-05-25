@@ -15,6 +15,7 @@
 #include "sensors/sht31_sensor.h"
 #include "sensors/vl53l0x_sensor.h"
 #include "motor/motor_driver.h"
+#include "motor/motor_state_machine.h"
 #include "tivaware_driverlib/uart.h"
 #include "utils/uartstdio.h"
 
@@ -134,17 +135,16 @@ EvSensorThresholds_t SensorManager_CheckThresholds(void)
 
     if (s_filteredData.distance_mm < s_thresholds.min_distance_mm)
     {
-        //FaultManager_TriggerEStop();
-        //UARTprintf("EmergencySTOP");
+        //MotorStateMachine_RequestEStop(EV_FAULT_DISTANCE_LIMIT);
     }
     
     if (s_filteredData.motor_power_w > s_thresholds.max_motor_power_w)
     {
-        //FaultManager_TriggerEStop();
+        //MotorStateMachine_RequestEStop(EV_FAULT_DISTANCE_LIMIT);
     }
     if (s_filteredData.cabin_temperature_c_x10 < s_thresholds.cooling_threshold_c_x10)
     {
-        //FaultManager_TriggerEStop();
+        //MotorStateMachine_RequestEStop(EV_FAULT_DISTANCE_LIMIT);
     }
 
     return s_thresholds;

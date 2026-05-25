@@ -22,7 +22,7 @@ void SerialPlotter_SendMotorFrame(const EvMotorStatus_t *status)
 void SerialPlotter_SendSensorFrame(const EvSensorDataRaw_t *raw, const EvSensorData_t *filtered)
 {
     if (raw == NULL || filtered == NULL) { return; }
-    UARTprintf("RawLux:%d FilteredLux:%d RawTempC:%d FilteredTempC:%d RawHumidPct:%d FilteredHumidPct:%d RawDistanceMm:%d FilteredDistanceMm:%d, RawRpm:%d FilteredRpm:%d, rawPower:%d, FilteredPower:%d\n",
+    UARTprintf("%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
                 raw->lux,
                 filtered->ambient_light_lux,
                 raw->temperatureC,

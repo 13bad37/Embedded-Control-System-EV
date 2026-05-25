@@ -1,10 +1,5 @@
-#include <stdio.h>
 #include <stdbool.h>
 #include <stdint.h>
-
-#include "FreeRTOS.h"
-#include "task.h"
-#include "semphr.h"
 
 #include "driverlib/interrupt.h"
 #include "driverlib/sysctl.h"
@@ -16,8 +11,6 @@
 #include "inc/hw_ints.h"
 #include "utils/uartstdio.h"
 #include "drivers/rtos_hw_drivers.h"
-
-
 
 
 void UART_Driver_Init(uint32_t sysClockFreq)
