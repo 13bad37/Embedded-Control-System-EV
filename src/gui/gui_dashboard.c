@@ -897,6 +897,7 @@ static void prvGUITask( void *pvParameters ) {
         }
         if(g_currentState != g_lastState) {
             UpdateBanner();
+            MotorStateUpdate();
             if(!startStopButtonDisplayed) {
                 StartStopButtonUpdate();
             }
