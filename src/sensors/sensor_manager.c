@@ -18,6 +18,8 @@
 #include "motor/motor_state_machine.h"
 #include "tivaware_driverlib/uart.h"
 #include "utils/uartstdio.h"
+#include "rtos/message_bus.h"
+#include "semphr.h"
 
 #define SENSOR_DEFAULT_DISTANCE_MM 300U
 #define SENSOR_DEFAULT_POWER_W    1800U
@@ -130,21 +132,42 @@ void SensorManager_SetThresholds(const EvSensorThresholds_t *thresholds)
     s_thresholds = *thresholds;
 }
 
+static bool s_distanceEstopFired = false;
+static bool s_powerEstopFired = false;
+
 EvSensorThresholds_t SensorManager_CheckThresholds(void)
 {
-
-    if (s_filteredData.distance_mm < s_thresholds.min_distance_mm)
+    /* Distance threshold — uses GUI-configurable value */
+    if (s_filteredData.distance_mm > 0 &&
+        s_filteredData.distance_mm < s_thresholds.min_distance_mm)
     {
-        //MotorStateMachine_RequestEStop(EV_FAULT_DISTANCE_LIMIT);
+        if (!s_distanceEstopFired)
+        {
+            s_distanceEstopFired = true;
+            // UARTprintf("E-STOP: distance %d mm\r\n", s_filteredData.distance_mm);
+            SemaphoreHandle_t sem = MessageBus_GetEstopSemaphore();
+            if (sem != NULL) { xSemaphoreGive(sem); }
+        }
     }
-    
+    else
+    {
+        s_distanceEstopFired = false;
+    }
+
+    /* Power threshold — uses GUI-configurable value */
     if (s_filteredData.motor_power_w > s_thresholds.max_motor_power_w)
     {
-        //MotorStateMachine_RequestEStop(EV_FAULT_DISTANCE_LIMIT);
+        if (!s_powerEstopFired)
+        {
+            s_powerEstopFired = true;
+            // UARTprintf("E-STOP: power %d W\r\n", s_filteredData.motor_power_w);
+            SemaphoreHandle_t sem = MessageBus_GetEstopSemaphore();
+            if (sem != NULL) { xSemaphoreGive(sem); }
+        }
     }
-    if (s_filteredData.cabin_temperature_c_x10 < s_thresholds.cooling_threshold_c_x10)
+    else
     {
-        //MotorStateMachine_RequestEStop(EV_FAULT_DISTANCE_LIMIT);
+        s_powerEstopFired = false;
     }
 
     return s_thresholds;

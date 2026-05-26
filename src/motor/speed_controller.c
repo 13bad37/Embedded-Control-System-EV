@@ -42,7 +42,7 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
     }
 
     float correction = (s_pi.kp * error) + (s_pi.ki * s_pi.integral);
-    float feedforward = ((float)reference_rpm / 1100.0f) * 18.0f;
+    float feedforward = ((float)reference_rpm / 1100.0f) * 17.0f;
     float output = feedforward + correction;
 
 
