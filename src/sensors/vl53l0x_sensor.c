@@ -90,9 +90,9 @@ void Vl53l0xSensor_Sample(void)
     }
     else
     {
-        /* Distance is clear — reset latch when system is idle or starting */
-        if (MotorControl_GetState() == EV_MOTOR_STATE_IDLE ||
-            MotorControl_GetState() == EV_MOTOR_STATE_STARTING)
+        // /* Distance is clear — reset latch when system is idle or starting */
+        // if (MotorControl_GetState() == EV_MOTOR_STATE_IDLE ||
+        //     MotorControl_GetState() == EV_MOTOR_STATE_STARTING)
         {
             s_estopFired = false;
         }
