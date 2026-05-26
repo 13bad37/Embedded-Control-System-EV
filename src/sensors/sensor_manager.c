@@ -20,10 +20,14 @@
 #include "utils/uartstdio.h"
 #include "rtos/message_bus.h"
 #include "semphr.h"
+#include "common/project_config.h"
 
 #define SENSOR_DEFAULT_DISTANCE_MM 300U
 #define SENSOR_DEFAULT_POWER_W    1800U
 #define SENSOR_DEFAULT_COOLING_C  25
+#define SENSOR_DEFAULT_HEATING_C  18
+#define SENSOR_DISTANCE_TRIP_CONFIRM_SAMPLES 2U
+#define SENSOR_DISTANCE_INIT_RETRY_MS 1000U
 
 EvSensorDataRaw_t s_rawData;
 EvSensorData_t s_filteredData;
@@ -31,7 +35,7 @@ EvSensorThresholds_t s_thresholds = {
     .max_motor_power_w = SENSOR_DEFAULT_POWER_W,
     .min_distance_mm = SENSOR_DEFAULT_DISTANCE_MM,
     .cooling_threshold_c_x10 = SENSOR_DEFAULT_COOLING_C,
-    .heating_threshold_c_x10 = 0
+    .heating_threshold_c_x10 = SENSOR_DEFAULT_HEATING_C
 };
 
 MovingAverageFilter_t g_lightFilter;
@@ -41,13 +45,43 @@ MovingAverageFilter_t g_speedFilter;
 MovingAverageFilter_t g_powerFilter;
 
 QueueHandle_t rawdataQueue = NULL;
+static volatile bool s_environmentReady = false;
+static bool s_lightInitTried = false;
+static bool s_lightReady = false;
+static TickType_t s_lastLightInitTick = 0U;
+static volatile bool s_lightSampleValid = false;
+static volatile bool s_distanceSampleValid = false;
+static bool s_distanceInitTried = false;
+static bool s_distanceReady = false;
+static TickType_t s_lastDistanceInitTick = 0U;
+static uint8_t s_distanceBlockedSamples = 0U;
+static bool s_distanceSafetyBlocked = false;
+static volatile EvFaultCode_t s_activeFault = EV_FAULT_NONE;
+
+static void TryInitializeDistanceSensor(TickType_t now)
+{
+    bool firstTry = !s_distanceInitTried;
+
+    s_distanceInitTried = true;
+    s_lastDistanceInitTick = now;
+    s_distanceReady = Vl53l0xSensor_Init();
+
+    if (!s_distanceReady && firstTry)
+    {
+        UARTprintf("VL53L0X init failed; retrying on I2C2\r\n");
+    }
+    else if (s_distanceReady && !firstTry)
+    {
+        UARTprintf("VL53L0X online after retry\r\n");
+    }
+}
 
 static void SensorPollingTask(void *pvParameters)
 {
-    AmbientLightSensor_Init();
     Sht31Sensor_Init();
-    Vl53l0xSensor_Init(); 
-    //These inits must run after scheduler starts so a one shot task is created to do it once (deletes after one)
+    TryInitializeDistanceSensor(xTaskGetTickCount());
+    /* Light retries in the poll task, so its failure can't hide distance safety. */
+    s_environmentReady = true;
 
     vTaskDelete(NULL);
 }
@@ -55,24 +89,45 @@ static void SensorPollingTask(void *pvParameters)
 
 void SensorManager_Init(void)
 {
+    /* This module owns the queue; one allocation avoids silently losing samples. */
     rawdataQueue = xQueueCreate(32, sizeof(SensorMsg_t));
-    xTaskCreate(SensorPollingTask, "SensorTask", 128, NULL, 2, NULL);
+    configASSERT(rawdataQueue != NULL);
+    xTaskCreate(SensorPollingTask, "SensorInit",
+                PROJECT_TASK_STACK_WORDS_MEDIUM, NULL, 2, NULL);
 }
 
-EvSensorDataRaw_t SensorManager_GetRawData(void)
+static uint32_t DrainRawDataQueue(void)
 {
     static uint32_t rawAdc0 = 0;
     static uint32_t rawAdc1 = 0;
     SensorMsg_t msg;
+    uint32_t updated = 0U;
     while (xQueueReceive(rawdataQueue, &msg, 0) == pdTRUE)
     {
         switch (msg.type)
         {
-            case SENSOR_MSG_DISTANCE: s_rawData.distanceMm = msg.value; break;
-            case SENSOR_MSG_LIGHT: s_rawData.lux = msg.value; break;
-            case SENSOR_MSG_TEMP: s_rawData.temperatureC = msg.value; break;
-            case SENSOR_MSG_HUMID: s_rawData.humidityRh = msg.value; break;
-            case SENSOR_MSG_SPEED: s_rawData.motor_speed_rpm = msg.value; break;
+            case SENSOR_MSG_DISTANCE:
+                s_rawData.distanceMm = msg.value;
+                s_distanceSampleValid = true;
+                updated |= (1UL << SENSOR_MSG_DISTANCE);
+                break;
+            case SENSOR_MSG_LIGHT:
+                s_rawData.lux = msg.value;
+                s_lightSampleValid = true;
+                updated |= (1UL << SENSOR_MSG_LIGHT);
+                break;
+            case SENSOR_MSG_TEMP:
+                s_rawData.temperatureC = msg.value;
+                updated |= (1UL << SENSOR_MSG_TEMP);
+                break;
+            case SENSOR_MSG_HUMID:
+                s_rawData.humidityRh = msg.value;
+                updated |= (1UL << SENSOR_MSG_HUMID);
+                break;
+            case SENSOR_MSG_SPEED:
+                s_rawData.motor_speed_rpm = msg.value;
+                updated |= (1UL << SENSOR_MSG_SPEED);
+                break;
             case SENSOR_MSG_POWERA: 
                 rawAdc0 = msg.value;
                 break;
@@ -91,22 +146,83 @@ EvSensorDataRaw_t SensorManager_GetRawData(void)
                 
                 float iTotal = (iA + iB) * 1.5f; 
                 s_rawData.motor_power_w = (POWER_SUPPLY_V * iTotal);
+                updated |= (1UL << SENSOR_MSG_POWERB);
                 break;
         }
     }
+    return updated;
+}
+
+EvSensorDataRaw_t SensorManager_GetRawData(void)
+{
     return s_rawData;
 }
 
-static void updateFilter(void)
+static void updateFilter(uint32_t updated)
 {
+    /* Only new readings enter each filter, so a faster safety loop adds no bias. */
+    if (updated & (1UL << SENSOR_MSG_LIGHT))
+    {
+        s_filteredData.ambient_light_lux =
+            Filter_ApplyMovingAverage(&g_lightFilter, s_rawData.lux, 4);
+    }
+    if (updated & (1UL << SENSOR_MSG_TEMP))
+    {
+        s_filteredData.cabin_temperature_c_x10 =
+            Filter_ApplyMovingAverage(&g_tempFilter, s_rawData.temperatureC, 4);
+    }
+    if (updated & (1UL << SENSOR_MSG_HUMID))
+    {
+        s_filteredData.cabin_humidity_rh_x10 =
+            Filter_ApplyMovingAverage(&g_humidFilter, s_rawData.humidityRh, 4);
+    }
+    if (updated & (1UL << SENSOR_MSG_SPEED))
+    {
+        s_filteredData.motor_speed_rpm =
+            Filter_ApplyMovingAverage(&g_speedFilter, s_rawData.motor_speed_rpm, 8);
+    }
+    if (updated & (1UL << SENSOR_MSG_POWERB))
+    {
+        s_filteredData.motor_power_w =
+            Filter_ApplyMovingAverage(&g_powerFilter, s_rawData.motor_power_w, 8);
+    }
+    if (updated & (1UL << SENSOR_MSG_DISTANCE))
+    {
+        s_filteredData.distance_mm = Vl53l0xSensor_UpdateFilter(s_rawData.distanceMm);
+    }
+}
 
-    s_filteredData.ambient_light_lux = Filter_ApplyMovingAverage(&g_lightFilter, s_rawData.lux, 4);
-    s_filteredData.cabin_temperature_c_x10 = Filter_ApplyMovingAverage(&g_tempFilter,  s_rawData.temperatureC, 4);
-    s_filteredData.cabin_humidity_rh_x10 = Filter_ApplyMovingAverage(&g_humidFilter, s_rawData.humidityRh, 4);
-    s_filteredData.motor_speed_rpm = Filter_ApplyMovingAverage(&g_speedFilter, s_rawData.motor_speed_rpm, 8);
-    s_filteredData.motor_power_w = Filter_ApplyMovingAverage(&g_powerFilter, s_rawData.motor_power_w, 8);
-    s_filteredData.distance_mm = Vl53l0xSensor_UpdateFilter(s_rawData.distanceMm);
-    
+static void UpdateDistanceSafetyFilter(uint32_t updated)
+{
+    if ((updated & (1UL << SENSOR_MSG_DISTANCE)) == 0U)
+    {
+        return;
+    }
+
+    if (s_rawData.distanceMm >= s_thresholds.min_distance_mm)
+    {
+        /*
+         * One fresh clear reading releases the live gate. A fault that already
+         * stopped the motor remains latched in the motor state machine.
+         */
+        s_distanceBlockedSamples = 0U;
+        s_distanceSafetyBlocked = false;
+        return;
+    }
+
+    if (s_distanceBlockedSamples < SENSOR_DISTANCE_TRIP_CONFIRM_SAMPLES)
+    {
+        s_distanceBlockedSamples++;
+    }
+
+    /*
+     * Two fresh close ranges reject one bad ToF value but still trip quickly
+     * at this sensor rate. This is the safety filter, not the GUI graph filter.
+     */
+    if (s_distanceBlockedSamples >= SENSOR_DISTANCE_TRIP_CONFIRM_SAMPLES)
+    {
+        s_distanceSafetyBlocked = true;
+    }
 }
 
 
@@ -132,57 +248,105 @@ void SensorManager_SetThresholds(const EvSensorThresholds_t *thresholds)
     s_thresholds = *thresholds;
 }
 
-static bool s_distanceEstopFired = false;
-static bool s_powerEstopFired = false;
-
 EvSensorThresholds_t SensorManager_CheckThresholds(void)
 {
-    /* Distance threshold — uses GUI-configurable value */
-    if (s_filteredData.distance_mm > 0 &&
-        s_filteredData.distance_mm < s_thresholds.min_distance_mm)
-    {
-        if (!s_distanceEstopFired)
-        {
-            s_distanceEstopFired = true;
-            // UARTprintf("E-STOP: distance %d mm\r\n", s_filteredData.distance_mm);
-            SemaphoreHandle_t sem = MessageBus_GetEstopSemaphore();
-            if (sem != NULL) { xSemaphoreGive(sem); }
-        }
-    }
-    else
-    {
-        s_distanceEstopFired = false;
-    }
+    EvFaultCode_t fault = EV_FAULT_NONE;
 
-    /* Power threshold — uses GUI-configurable value */
+    /* Power wins if both fail together, bc that is the motor's own limit. */
     if (s_filteredData.motor_power_w > s_thresholds.max_motor_power_w)
     {
-        if (!s_powerEstopFired)
-        {
-            s_powerEstopFired = true;
-            // UARTprintf("E-STOP: power %d W\r\n", s_filteredData.motor_power_w);
-            SemaphoreHandle_t sem = MessageBus_GetEstopSemaphore();
-            if (sem != NULL) { xSemaphoreGive(sem); }
-        }
+        fault = EV_FAULT_POWER_LIMIT;
     }
-    else
+    else if (s_distanceSampleValid && s_distanceSafetyBlocked)
     {
-        s_powerEstopFired = false;
+        fault = EV_FAULT_DISTANCE_LIMIT;
+    }
+
+    if (fault != s_activeFault)
+    {
+        s_activeFault = fault;
+        if (fault != EV_FAULT_NONE)
+        {
+            MessageBus_RaiseEStop(fault);
+        }
     }
 
     return s_thresholds;
 }
 
+EvFaultCode_t SensorManager_GetActiveFault(void)
+{
+    /* Only a confirmed live hazard blocks Start; a slow first read is not one. */
+    return s_activeFault;
+}
+
+bool SensorManager_HasAmbientLightReading(void)
+{
+    return s_lightSampleValid;
+}
 
 void SensorManager_Poll(void)
 {
-    AmbientLightSensor_Sample();
-    Sht31Sensor_Sample();
-    Vl53l0xSensor_Sample();
-    /* Pull in this cycle's queued values before updating what the UI plots. */
-    (void)SensorManager_GetRawData();
-    s_rawData.motor_speed_rpm = MotorDriver_GetRpm();
-    updateFilter();
+    /* Do power/speed trips from boot, bc an I2C timeout mustn't hold up E-stop. */
+    uint32_t updated = DrainRawDataQueue();
+    updateFilter(updated);
+    UpdateDistanceSafetyFilter(updated);
     SensorManager_CheckThresholds();
+}
 
+void SensorManager_PollEnvironment(void)
+{
+    EvMotorState_t motorState;
+    bool motorActive;
+    TickType_t now;
+
+    if (!s_environmentReady)
+    {
+        return;
+    }
+
+    now = xTaskGetTickCount();
+    if (!s_distanceReady &&
+        (!s_distanceInitTried ||
+         (now - s_lastDistanceInitTick) >=
+             pdMS_TO_TICKS(SENSOR_DISTANCE_INIT_RETRY_MS)))
+    {
+        /* A loose Grove cable at boot should not need a board reset after reseat. */
+        TryInitializeDistanceSensor(now);
+    }
+
+    if (s_distanceReady)
+    {
+        /*
+         * Check the safety sensor first, so failed/slow optional reads don't
+         * make the distance status feel stuck when u clear an obstacle.
+         */
+        Vl53l0xSensor_Sample();
+    }
+
+    motorState = MotorStateMachine_GetState();
+    motorActive = (motorState == EV_MOTOR_STATE_STARTING ||
+                   motorState == EV_MOTOR_STATE_RUNNING ||
+                   motorState == EV_MOTOR_STATE_STOPPING ||
+                   motorState == EV_MOTOR_STATE_ESTOP_BRAKING);
+
+    if (!motorActive && !s_lightReady &&
+        (!s_lightInitTried ||
+         (now - s_lastLightInitTick) >= pdMS_TO_TICKS(1000U)))
+    {
+        /*
+         * Re-probe a missing light sensor only while stopped. A failed optional
+         * I2C device mustn't delay distance E-stop checks while u are running.
+         */
+        s_lightInitTried = true;
+        s_lastLightInitTick = now;
+        s_lightReady = AmbientLightSensor_Init();
+    }
+
+    /* These reads can wait on I2C, so they don't run in the fast safety loop. */
+    if (s_lightReady)
+    {
+        AmbientLightSensor_Sample();
+    }
+    Sht31Sensor_Sample();
 }

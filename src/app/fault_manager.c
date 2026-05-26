@@ -12,9 +12,9 @@
 #include "semphr.h"
 #include "task.h"
 
-#define ESTOP_MAX_DUTY_THRESHOLD    32U
-
-static bool s_estopTriggered = false;
+static bool s_manualEstopActive = false;
+static bool s_lastEstopPressed = false;
+static bool s_lastAckPressed = false;
 
 void FaultManager_Init(void)
 {
@@ -28,49 +28,31 @@ void FaultManager_Init(void)
 
 void FaultManager_Run(void)
 {
-    /* Condition 1 — motor power limit via duty cycle */
-    EvMotorStatus_t status = MotorControl_GetStatus();
-    if (status.state == EV_MOTOR_STATE_RUNNING &&
-        status.pwm_duty_per_mille > ESTOP_MAX_DUTY_THRESHOLD)
-    {
-        if (!s_estopTriggered)
-        {
-            s_estopTriggered = true;
-            UARTprintf("E-STOP: power limit exceeded duty=%d\r\n",
-                status.pwm_duty_per_mille);
-            SemaphoreHandle_t sem = MessageBus_GetEstopSemaphore();
-            if (sem != NULL) { xSemaphoreGive(sem); }
-        }
-    }
-
-    /* Condition 2 — e-stop button PJ0 */
     bool buttonPressed = (GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_0) == 0);
-    if (buttonPressed && !s_estopTriggered)
+    s_manualEstopActive = buttonPressed;
+    if (buttonPressed && !s_lastEstopPressed)
     {
-        s_estopTriggered = true;
         UARTprintf("E-STOP: button pressed\r\n");
-        SemaphoreHandle_t sem = MessageBus_GetEstopSemaphore();
-        if (sem != NULL) { xSemaphoreGive(sem); }
+        MessageBus_RaiseEStop(EV_FAULT_USER_ESTOP);
     }
+    s_lastEstopPressed = buttonPressed;
 
-    /* Condition 3 — acknowledge button PJ1, only in fault latched */
     bool ackButton = (GPIOPinRead(GPIO_PORTJ_BASE, GPIO_PIN_1) == 0);
-    if (ackButton && MotorControl_GetState() == EV_MOTOR_STATE_FAULT_LATCHED)
+    if (ackButton && !s_lastAckPressed &&
+        MotorControl_GetState() == EV_MOTOR_STATE_FAULT_LATCHED)
     {
         UARTprintf("Fault acknowledged — returning to Idle\r\n");
         MotorStateMachine_AcknowledgeFault();
-        vTaskDelay(pdMS_TO_TICKS(500));  /* debounce */
     }
-
-    /* Reset estop latch when system returns to idle */
-    if (MotorControl_GetState() == EV_MOTOR_STATE_IDLE ||
-        MotorControl_GetState() == EV_MOTOR_STATE_STARTING)
-    {
-        s_estopTriggered = false;
-    }
+    s_lastAckPressed = ackButton;
 }
 
 void FaultManager_RecordFault(EvFaultCode_t fault)
 {
     (void)fault;
+}
+
+EvFaultCode_t FaultManager_GetActiveFault(void)
+{
+    return s_manualEstopActive ? EV_FAULT_USER_ESTOP : EV_FAULT_NONE;
 }

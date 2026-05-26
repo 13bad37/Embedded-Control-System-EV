@@ -17,17 +17,15 @@ static TickType_t s_lastSampleTick;
 
 uint16_t lux;
 
-void AmbientLightSensor_Init(void)
+bool AmbientLightSensor_Init(void)
 {
-    
-    bool success;
-    sensorOpt3001Init();
-    success = sensorOpt3001Test();
-    while (!success) {
-        vTaskDelay(PROJECT_SYSTEM_CLOCK_HZ);
-        sensorOpt3001Init();
-        success = sensorOpt3001Test();
+    /* Try once here; the manager retries later so one missing sensor can't stall u. */
+    if (!sensorOpt3001Init())
+    {
+        return false;
     }
+
+    return sensorOpt3001Test();
 }
 
 void AmbientLightSensor_Sample(void)

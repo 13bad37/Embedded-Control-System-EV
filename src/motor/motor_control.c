@@ -26,108 +26,138 @@ void MotorControl_Init(void)
 
 void MotorControl_Run(void)
 {
-    static uint32_t s_estopTickCount = 0U;
+    static EvMotorState_t s_previousState = EV_MOTOR_STATE_IDLE;
     EvMotorState_t state = MotorStateMachine_GetState();
 
-    /* Only update actual RPM if reading is valid */
+    /* A zero RPM reading is real data, especially when deciding a stop is done. */
     uint32_t rpm = MotorDriver_GetRpm();
-    if (rpm > 0U)
+    s_motorStatus.actual_speed_rpm = rpm;
+    if (rawdataQueue != NULL)
     {
-        s_motorStatus.actual_speed_rpm = rpm;
         SensorMsg_t msg = { .type = SENSOR_MSG_SPEED, .value = rpm };
-        xQueueSendToBack(rawdataQueue, &msg, 0);
-    }
-
-    /* During estop braking, force RPM to 0 after 3 seconds
-       in case hall sensor keeps reporting stale speed */
-    if (state == EV_MOTOR_STATE_ESTOP_BRAKING)
-    {
-        s_estopTickCount++;
-        if (s_estopTickCount > (3000U / PROJECT_MOTOR_TASK_PERIOD_MS))
-        {
-            s_motorStatus.actual_speed_rpm = 0U;
-            s_motorStatus.reference_speed_rpm = 0U;
-        }
-    }
-    else
-    {
-        s_estopTickCount = 0U;
+        (void)xQueueSendToBack(rawdataQueue, &msg, 0);
     }
 
     MotorStateMachine_UpdateActualRpm(s_motorStatus.actual_speed_rpm);
 
     if (state == EV_MOTOR_STATE_STARTING)
     {
+        MotorDriver_RunKickstart(PROJECT_MOTOR_TASK_PERIOD_MS);
         if (MotorDriver_GetHallEdgeCount() >= HALL_VALID_EDGE_THRESHOLD)
         {
             MotorStateMachine_SetHallValid(true);
         }
+        else if (MotorDriver_KickstartTimedOut())
+        {
+            MotorControl_EStop(EV_FAULT_STARTUP);
+        }
+    }
+
+    if (state == EV_MOTOR_STATE_RUNNING &&
+        s_previousState == EV_MOTOR_STATE_STARTING)
+    {
+        /* Pick up from the kickstart speed once, then let zero stay zero. */
+        s_motorStatus.reference_speed_rpm = s_motorStatus.actual_speed_rpm;
+        SpeedController_Reset();
+    }
+    else if (state == EV_MOTOR_STATE_STOPPING &&
+             s_previousState != EV_MOTOR_STATE_STOPPING)
+    {
+        /*
+         * The Stop button can be pressed while the motor is still speeding up.
+         * Never start a stop ramp from a target above the speed it has reached.
+         */
+        if (s_motorStatus.reference_speed_rpm > s_motorStatus.actual_speed_rpm)
+        {
+            s_motorStatus.reference_speed_rpm = s_motorStatus.actual_speed_rpm;
+        }
+        SpeedController_Reset();
+    }
+    else if (state == EV_MOTOR_STATE_ESTOP_BRAKING &&
+             s_previousState != EV_MOTOR_STATE_ESTOP_BRAKING)
+    {
+        s_motorStatus.reference_speed_rpm = s_motorStatus.actual_speed_rpm;
+        SpeedController_Reset();
     }
 
     if (state == EV_MOTOR_STATE_RUNNING ||
-    state == EV_MOTOR_STATE_ESTOP_BRAKING)
+        state == EV_MOTOR_STATE_STOPPING)
     {
-        if (s_motorStatus.reference_speed_rpm == 0U &&
-            state == EV_MOTOR_STATE_RUNNING)
-        {
-            s_motorStatus.reference_speed_rpm = s_motorStatus.actual_speed_rpm;
-            SpeedController_Reset();
-        }
-
-        uint8_t estop = (state == EV_MOTOR_STATE_ESTOP_BRAKING) ? 1U : 0U;
+        uint32_t target = (state == EV_MOTOR_STATE_RUNNING) ?
+                          s_motorStatus.desired_speed_rpm : 0U;
 
         s_motorStatus.reference_speed_rpm = RampController_Update(
             s_motorStatus.reference_speed_rpm,
-            s_motorStatus.desired_speed_rpm,
+            target,
             PROJECT_MOTOR_TASK_PERIOD_MS,
-            estop
+            0U
         );
 
-        if (estop)
-        {
-            /* During estop just map reference directly to duty
-               bypassing the PI to avoid oscillation */
-            uint32_t ref = s_motorStatus.reference_speed_rpm;
-            uint16_t duty = (ref > 0U) ?
-                (uint16_t)((ref * 15U) / 1500U) : 0U;
-            s_motorStatus.pwm_duty_per_mille = duty;
-        }
-        else
-        {
-            s_motorStatus.pwm_duty_per_mille = SpeedController_Update(
-                s_motorStatus.reference_speed_rpm,
-                s_motorStatus.actual_speed_rpm
-            );
-            // UARTprintf("actual=%d ref=%d\r\n",
-            //     s_motorStatus.actual_speed_rpm,
-            //     s_motorStatus.reference_speed_rpm);
-        }
+        uint16_t commandedDuty;
 
+        commandedDuty = SpeedController_Update(
+            s_motorStatus.reference_speed_rpm,
+            s_motorStatus.actual_speed_rpm
+        );
+
+        s_motorStatus.pwm_duty_per_mille = commandedDuty;
         MotorDriver_SetPwmDuty(s_motorStatus.pwm_duty_per_mille);
+    }
+    else if (state == EV_MOTOR_STATE_ESTOP_BRAKING)
+    {
+        /*
+         * Keep the specified emergency reference ramp for reporting, but do
+         * not overwrite the brake with forward PWM while the rotor slows.
+         */
+        s_motorStatus.reference_speed_rpm = RampController_Update(
+            s_motorStatus.reference_speed_rpm,
+            0U,
+            PROJECT_MOTOR_TASK_PERIOD_MS,
+            1U
+        );
+        s_motorStatus.pwm_duty_per_mille = 0U;
     }
     else
     {
         SpeedController_Reset();
         s_motorStatus.reference_speed_rpm = 0U;
-        s_motorStatus.actual_speed_rpm    = 0U;
+        s_motorStatus.pwm_duty_per_mille = 0U;
     }
 
     s_motorStatus.state = state;
+    s_previousState = state;
 }
 
 void MotorControl_Start(void)
 {
-    MotorStateMachine_RequestStart();
+    if (s_motorStatus.desired_speed_rpm > 0U)
+    {
+        MotorStateMachine_RequestStart();
+    }
 }
 
 void MotorControl_Stop(void)
 {
+    s_motorStatus.desired_speed_rpm = 0U;
     MotorStateMachine_RequestStop();
 }
 
 void MotorControl_SetSpeed(uint32_t rpm)
 {
+    EvMotorState_t state = MotorStateMachine_GetState();
+    if (state == EV_MOTOR_STATE_ESTOP_BRAKING ||
+        state == EV_MOTOR_STATE_FAULT_LATCHED ||
+        state == EV_MOTOR_STATE_STOPPING)
+    {
+        return;
+    }
+
     s_motorStatus.desired_speed_rpm = rpm;
+    if (rpm == 0U &&
+        (state == EV_MOTOR_STATE_RUNNING || state == EV_MOTOR_STATE_STARTING))
+    {
+        MotorStateMachine_RequestStop();
+    }
 }
 
 void MotorControl_EStop(EvFaultCode_t fault)

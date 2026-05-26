@@ -32,6 +32,14 @@ BaseType_t RtosTasks_CreateAll(void)
                             NULL),
                 &status);
 
+    MarkFailure(xTaskCreate(EnvironmentSensorTask,
+                            "env",
+                            PROJECT_TASK_STACK_WORDS_MEDIUM,
+                            NULL,
+                            PROJECT_TASK_PRIORITY_SENSOR,
+                            NULL),
+                &status);
+
     MarkFailure(xTaskCreate(GuiTask,
                             "gui",
                             PROJECT_TASK_STACK_WORDS_SMALL,

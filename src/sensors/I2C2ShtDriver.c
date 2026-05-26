@@ -162,6 +162,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 {   
     I2Cdata_2 = data;
     state_2 = WRITED0;
+    i2c2_success = true;
 
     // Load device slave address
     I2CMasterSlaveAddrSet(I2C2_BASE, ui8Addr, false);
@@ -172,7 +173,7 @@ bool writeI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
 
     if (xSemaphoreTake(I2C2Semaphore, pdMS_TO_TICKS(100)) == pdTRUE) 
     {
-        return true;
+        return i2c2_success;
     }
     state_2 = IDLE_1;
     return false;
@@ -190,6 +191,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     I2Cdata_2 = data;
     I2C2Address = ui8Addr;
     state_2 = WRITEREAD;
+    i2c2_success = true;
 
 
     // Load device slave address and change I2C to write
@@ -203,7 +205,7 @@ bool readI2C(uint8_t ui8Addr, uint8_t ui8Reg, uint8_t *data)
     //I2CMasterSlaveAddrSet(I2C0_BASE, ui8Addr, true);
     if (xSemaphoreTake(I2C2Semaphore, pdMS_TO_TICKS(100)) == pdTRUE) 
     {
-        return true;
+        return i2c2_success;
     }
     state_2 = IDLE_1;
     return false;

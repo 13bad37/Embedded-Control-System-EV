@@ -2,7 +2,7 @@
 #include <stdbool.h>
 
 
-void AmbientLightSensor_Init(void);
+bool AmbientLightSensor_Init(void);
 
 void AmbientLightSensor_Sample(void);
 
