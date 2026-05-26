@@ -56,6 +56,7 @@ uint32_t lastGraphY[6];
 bool plotToggle = false;
 bool faultLatched = false;
 bool faultAcknowledged = false;
+bool startStopButtonDisplayed = true;
 uint32_t g_thresholds[4] = {250, 250, 250, 25};
 uint32_t g_temp_thresholds[4] = {250, 250, 250, 25};
 uint32_t g_max_values[6] = {500, 500, 1000, 50, 100, 500};
@@ -65,7 +66,6 @@ char plotBuf[20];
 char configBuf[20];
 char configBuf2[20];
 char configBuf3[20];
-
 
 static void prvGUITask( void *pvParameters );
 void OnPrevious(tWidget *psWidget);
@@ -78,6 +78,7 @@ void OnStartStopButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 void UpdateBanner();
 void ClockUpdate();
+void MotorStateUpdate();
 void OnSensorButtonPress(tWidget *psWidget);
 void OnFaultAcknowledgeButtonPress(tWidget *psWidget);
 void OnConfigButtonPress(tWidget *psWidget);
@@ -92,6 +93,7 @@ EvMotorState_t g_lastState = EV_MOTOR_STATE_IDLE;
 volatile bool configUpdateRequest = false;
 volatile bool clockUpdateRequest = true;
 bool nightConditions = false;
+bool firstDisplay = true;
 TickType_t g_lastTimerTicks;
 static uint32_t g_lastUserSpeed = 250U;
 
@@ -120,15 +122,6 @@ static void RequestUiWork(uint32_t request)
         xTaskNotifyGive(xDisplayTaskHandle);
     }
 }
-
-//for testing
-enum MotorStates {
-    IDLE,
-    STARTING,
-    RUNNING,
-    ESTOP,
-    FAULT
-} MotorState = IDLE;
 
 
 tPushButtonWidget g_psFaultAcknowledgeButton[] = 
@@ -161,19 +154,19 @@ tPushButtonWidget g_psClock[] = {
 
 tSliderWidget g_psSliders[] = {
     SliderStruct(g_psPanels + 1, 0, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 129, 140, 18, 0, 1000, 250,
+                 &g_sKentec320x240x16_SSD2119, 150, 129, 140, 18, 0, 3000, 1500,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                   SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm16, "250", 0, 0, OnSliderChange),
     SliderStruct(g_psPanels + 1, 0, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 149, 140, 18, 0, 2500, 250,
+                 &g_sKentec320x240x16_SSD2119, 150, 149, 140, 18, 0, 3000, 1500,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                   SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
                  &g_sFontCm16, "250", 0, 0, OnSliderChange),
     SliderStruct(g_psPanels + 1, 0, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 149, 140, 18, 0, 1000, 250,
+                 &g_sKentec320x240x16_SSD2119, 150, 149, 140, 18, 0, 1000, 500,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                   SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
@@ -287,7 +280,6 @@ RectangularButton(g_sNext, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 270, 190,
                   g_pui8Blue50x50Press, 0, 0, OnNext);
 
 static void HandlePreviousPanel(void) {
-    if(MotorState == ESTOP) return;
     if(g_ui32Panel == 0) {
         return;
     }
@@ -296,7 +288,6 @@ static void HandlePreviousPanel(void) {
     g_ui32Panel--;
     WidgetAdd(WIDGET_ROOT, (tWidget *)(g_psPanels + g_ui32Panel));
     WidgetPaint((tWidget *)(g_psPanels + g_ui32Panel));
-    // UpdateBanner();
 
     if(g_ui32Panel == 0)
     {
@@ -320,7 +311,6 @@ void OnPrevious(tWidget *psWidget) {
 }
 
 static void HandleNextPanel(void) {
-    if(MotorState == ESTOP) return;
     if(g_ui32Panel == (NUM_PANELS - 1)) {
         return;
     }
@@ -353,18 +343,18 @@ void OnNext(tWidget *psWidget) {
 }
 
 void OnIntroPaint(tWidget *psWidget, tContext *psContext) {
-    EvMotorState_t motorState = MotorControl_GetState();
-    if(motorState == EV_MOTOR_STATE_ESTOP_BRAKING || motorState == EV_MOTOR_STATE_FAULT_LATCHED) {
+    if(g_currentState == EV_MOTOR_STATE_ESTOP_BRAKING || g_currentState == EV_MOTOR_STATE_FAULT_LATCHED) {
         GrContextFontSet(psContext, &g_sFontCm18);
-        GrContextForegroundSet(psContext, ClrSilver);
+        GrContextForegroundSet(psContext, ClrWhite);
         GrStringDrawCentered(psContext, "An Emergency Stop Has Been Triggered.", -1, 160, 32, 0);
         GrStringDrawCentered(psContext, "You must acknowledge the fault before", -1, 160, 55, 0);
         GrStringDrawCentered(psContext, "starting the motor.", -1, 160, 75, 0);
         return;
     }
-    WidgetRemove((tWidget *)&g_psFaultAcknowledgeButton);
-    ClockUpdate();
 
+    WidgetRemove((tWidget *)&g_psFaultAcknowledgeButton);
+    MotorStateUpdate();
+    ClockUpdate();
 }
 
 void UpdatePlotAxes() {
@@ -440,7 +430,7 @@ void UpdateConfigPage(bool newOpen) {
         if(g_ui32LastConfig != 0 || newOpen) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Motor Speed: ", -1, 5, 62, 0);
-            GrStringDraw(&sContext, "Motor State: ", -1, 5, 77, 0);
+            GrStringDraw(&sContext, "Motor Power: ", -1, 5, 77, 0);
             GrStringDraw(&sContext, "Desired Speed", -1, 5, 130, 0);
             GrStringDraw(&sContext, "Power Threshold", -1, 5, 150, 0);
             WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)g_psSliders);
@@ -463,23 +453,8 @@ void UpdateConfigPage(bool newOpen) {
         GrContextForegroundSet(&sContext, ClrWhite);
         usprintf(configBuf, "%drpm", sensorData.motor_speed_rpm);
         GrStringDraw(&sContext, configBuf, -1, 100, 62, 0);
-        switch (g_currentState) {
-            case EV_MOTOR_STATE_IDLE:
-                GrStringDraw(&sContext, "Idle", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_STARTING: 
-                GrStringDraw(&sContext, "Starting", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_RUNNING:
-                GrStringDraw(&sContext, "Running", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_ESTOP_BRAKING:
-                GrStringDraw(&sContext, "EStop Braking", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_FAULT_LATCHED:
-                GrStringDraw(&sContext, "Fault Latched", -1, 100, 77, 0);
-                break;
-        }
+        usprintf(configBuf, "%dW", sensorData.motor_power_w);
+        GrStringDraw(&sContext, configBuf, -1, 100, 77, 0);
     } 
     else if(g_ui32CurrentConfig == 1) {
         if(g_ui32LastConfig != 1 || newOpen) {
@@ -657,7 +632,6 @@ void SensorDataToArray() {
 }
 
 void OnCanvasPaint(tWidget *psWidget, tContext *psContext) {
-    if(MotorState == ESTOP) return;
     SensorDataToArray();
 
     // define and draw the scale
@@ -697,19 +671,17 @@ void OnCanvasPaint(tWidget *psWidget, tContext *psContext) {
 }
 
 static void HandleStartStopButton(void) {
-    EvMotorState_t motorState = MotorControl_GetState();
-    if (motorState == EV_MOTOR_STATE_IDLE || MotorState == IDLE) {
-        PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Stop Motor");
-        PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrRedMask);
+    if (g_currentState == EV_MOTOR_STATE_IDLE) {
+        PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "");
+        PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, 0);
         MotorControl_SetSpeed(g_lastUserSpeed);
         MotorControl_Start();
-        MotorState = RUNNING;
-    } else {
-        PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Start Motor");
-        PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrLightGreen);
+    } else if(g_currentState == EV_MOTOR_STATE_RUNNING ){
+        PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "");
+        PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, 0);
         MotorControl_Stop();
-        MotorState = IDLE;
     }
+    startStopButtonDisplayed = false;
     WidgetPaint((tWidget *)&g_psStartStopButton);
 }
 
@@ -769,9 +741,7 @@ void UpdateBanner() {
     sRect.i16XMax = GrContextDpyWidthGet(&sContext) - 1;
     sRect.i16YMax = 23;
 
-    EvMotorState_t motorState = MotorControl_GetState();
-
-    switch (motorState) {
+    switch (g_currentState) {
         case EV_MOTOR_STATE_IDLE:
             GrContextForegroundSet(&sContext, ClrGold);
             GrRectFill(&sContext, &sRect);
@@ -820,12 +790,57 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value) {
 }
 
 void ClockUpdate() {
+    if(g_ui32Panel != 0) return;
     int32_t seconds = g_elapsed_seconds % 60;
     int32_t minutes = (g_elapsed_seconds / 60) % 60;
     int32_t hours = (g_elapsed_seconds / 3600) % 12;
     usprintf(clockBuf, "27/05/26 %02d:%02d:%02d", hours, minutes, seconds);
     PushButtonTextSet((tPushButtonWidget *)&g_psClock, clockBuf);
     WidgetPaint((tWidget *)&g_psClock);
+}
+
+void MotorStateUpdate() {
+    if(g_ui32Panel != 0) return;
+
+    tRectangle stateClearRect = {0, 205, 180, 220};
+    GrContextForegroundSet(&sContext, ClrBlack);
+    GrRectFill(&sContext, &stateClearRect);
+
+    GrContextFontSet(&sContext, &g_sFontCm18);
+    GrContextForegroundSet(&sContext, ClrWhite);
+    switch (g_currentState) {
+        case EV_MOTOR_STATE_IDLE:
+            GrStringDraw(&sContext, "Motor State: Idle", -1, 5, 205, 0);
+            break;
+        case EV_MOTOR_STATE_STARTING: 
+            GrStringDraw(&sContext, "Motor State: Starting", -1, 5, 205, 0);
+            break;
+        case EV_MOTOR_STATE_RUNNING:
+            GrStringDraw(&sContext, "Motor State: Running", -1, 5, 205, 0);
+            break;
+        case EV_MOTOR_STATE_ESTOP_BRAKING:
+            GrStringDraw(&sContext, "Motor State: EStop Braking", -1, 5, 205, 0);
+            break;
+        case EV_MOTOR_STATE_FAULT_LATCHED:
+            GrStringDraw(&sContext, "Motor State: Fault Latched", -1, 5, 205, 0);
+            break;
+    }
+}
+
+void StartStopButtonUpdate() {
+    if(g_ui32Panel != 0) return;
+
+    if(g_currentState == EV_MOTOR_STATE_IDLE) {
+        PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Start Motor");
+        PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrLightGreen);
+        startStopButtonDisplayed = true;
+        WidgetPaint((tWidget *)&g_psStartStopButton);
+    } else if(g_currentState == EV_MOTOR_STATE_RUNNING) {
+        PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Stop Motor");
+        PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrRedMask);
+        startStopButtonDisplayed = true;
+        WidgetPaint((tWidget *)&g_psStartStopButton);
+    }
 }
 
 static void ProcessUiRequests(void)
@@ -882,6 +897,9 @@ static void prvGUITask( void *pvParameters ) {
         }
         if(g_currentState != g_lastState) {
             UpdateBanner();
+            if(!startStopButtonDisplayed) {
+                StartStopButtonUpdate();
+            }
             g_lastState = g_currentState;
         }
 
@@ -905,15 +923,12 @@ static void prvGUITask( void *pvParameters ) {
         }
 
         if(clockUpdateRequest) {
+            MotorStateUpdate();
             ClockUpdate();
             clockUpdateRequest = false;
         }
-        
 
         ProcessUiRequests();
-
-        // EvMotorState_t motorState = MotorControl_GetState();
-        // if(motorState != EV_MOTOR_STATE_ESTOP_BRAKING) {
         WidgetMessageQueueProcess();
         ProcessUiRequests();
 
