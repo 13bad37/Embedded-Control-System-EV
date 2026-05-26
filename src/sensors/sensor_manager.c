@@ -55,7 +55,7 @@ static void SensorPollingTask(void *pvParameters)
 
 void SensorManager_Init(void)
 {
-  
+    rawdataQueue = xQueueCreate(32, sizeof(SensorMsg_t));
     xTaskCreate(SensorPollingTask, "SensorTask", 128, NULL, 2, NULL);
 }
 

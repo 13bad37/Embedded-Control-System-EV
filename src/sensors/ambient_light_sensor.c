@@ -19,6 +19,7 @@ uint16_t lux;
 
 void AmbientLightSensor_Init(void)
 {
+    
     bool success;
     sensorOpt3001Init();
     success = sensorOpt3001Test();
