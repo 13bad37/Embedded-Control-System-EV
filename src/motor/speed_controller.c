@@ -49,13 +49,7 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
     if (output > (float)PI_OUTPUT_MAX) { output = (float)PI_OUTPUT_MAX; }
     if (output < (float)PI_OUTPUT_MIN) { output = (float)PI_OUTPUT_MIN; }
 
-    /* DEBUG */
-    /* Replace the UARTprintf debug line with this */
-    // UARTprintf("PI: err=%d int=%d corr=%d out=%d\r\n",
-    //     (int)error,
-    //     (int)(s_pi.integral * 100),   /* multiply by 100 to see 2 decimal places */
-    //     (int)(correction * 100),
-    //     (int)output);
+
 
     return (uint16_t)output;
 }

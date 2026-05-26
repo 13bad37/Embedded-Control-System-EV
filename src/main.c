@@ -16,24 +16,20 @@ int main(void)
 {
     SystemInit_ConfigureBoard();
 
-    UARTprintf("Starting AppModules_Init\r\n");
     AppModules_Init();
 
-    UARTprintf("Starting MessageBus_Init\r\n");
     if (MessageBus_Init() != pdPASS)
     {
         UARTprintf("ERROR: MessageBus_Init failed\r\n");
         for (;;) {}
     }
 
-    UARTprintf("Starting RtosTasks_CreateAll\r\n");
     if (RtosTasks_CreateAll() != pdPASS)
     {
         UARTprintf("ERROR: RtosTasks_CreateAll failed\r\n");
         for (;;) {}
     }
 
-    UARTprintf("Starting scheduler\r\n");
     vTaskStartScheduler();
 
     UARTprintf("ERROR: Scheduler returned - heap too small?\r\n");

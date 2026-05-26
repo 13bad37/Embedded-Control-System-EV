@@ -39,6 +39,8 @@
 #include "drivers/Kentec320x240x16_ssd2119_spi.h"
 #include "drivers/touch.h"
 #include "drivers/images.h"
+#include "gui/aest_clock.h"
+#include "gui/fault_history.h"
 #include "motor/motor_control.h"
 #include "sensors/sensor_manager.h"
 #include "motor/motor_state_machine.h"
@@ -50,6 +52,7 @@ uint32_t g_ui32LastPanel;
 TaskHandle_t xDisplayTaskHandle = NULL; 
 #define PLOT_SIZE 200
 #define DISPLAY_TASK_STACK_WORDS 768U
+#define FAULT_HISTORY_PANEL_INDEX 3U
 uint32_t graphX = 1;
 uint32_t graphY[6];
 uint32_t lastGraphY[6];
@@ -59,8 +62,7 @@ bool faultLatched = false;
 uint32_t g_thresholds[5] = {250, 250, 250, 25, 18};
 uint32_t g_temp_thresholds[5] = {250, 250, 250, 25, 18};
 uint32_t g_max_values[6] = {1000, 2500, 1000, 50, 100, 1000};
-volatile uint32_t g_elapsed_seconds = 40500;
-char clockBuf[20];
+char clockBuf[GUI_AEST_TIMESTAMP_BUFFER_SIZE];
 char plotBuf[20];
 char configBuf[20];
 char configBuf2[20];
@@ -74,6 +76,7 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext);
 void OnCanvasPaint(tWidget *psWidget, tContext *psContext);
 void OnSensorPlotsPaint(tWidget *psWidget, tContext *psContext);
 void OnConfigurationPaint(tWidget *psWidget, tContext *psContext);
+void OnFaultHistoryPaint(tWidget *psWidget, tContext *psContext);
 void OnStartStopButtonPress(tWidget *psWidget);
 void OnSliderChange(tWidget *psWidget, int32_t i32Value);
 void UpdateBanner();
@@ -153,7 +156,7 @@ tPushButtonWidget g_psClock[] = {
                         &g_sKentec320x240x16_SSD2119, 60, 222, 200, 16,
                         PB_STYLE_FILL | PB_STYLE_TEXT,
                         0, 0, 0, ClrWhite,
-                        &g_sFontFixed6x8, "27/05/26 11:15:00", 0, 0, 0, 0, 0),
+                        &g_sFontFixed6x8, "--/--/-- --:--:-- AEST", 0, 0, 0, 0, 0),
 };
 
 tSliderWidget g_psSliders[] = {
@@ -262,12 +265,18 @@ Canvas(g_sSensorPlots, g_psPanels + 2, &g_sCanvas3, 0, &g_sKentec320x240x16_SSD2
 Canvas(g_sConfiguration, g_psPanels + 1, g_psConfigButtons, 0, &g_sKentec320x240x16_SSD2119, 0, 24,
        320, 216, CANVAS_STYLE_APP_DRAWN, 0, 0, 0, 0, 0, 0, OnConfigurationPaint);
 
+Canvas(g_sFaultHistory, g_psPanels + FAULT_HISTORY_PANEL_INDEX, 0, 0,
+       &g_sKentec320x240x16_SSD2119, 0, 24, 320, 216, CANVAS_STYLE_APP_DRAWN,
+       0, 0, 0, 0, 0, 0, OnFaultHistoryPaint);
+
 tCanvasWidget g_psPanels[] = {
     CanvasStruct(0, 0, &g_sIntroduction, &g_sKentec320x240x16_SSD2119, 0, 24,
                  320, 216, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
     CanvasStruct(0, 0, &g_sConfiguration, &g_sKentec320x240x16_SSD2119, 0, 24,
                  320, 216, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
     CanvasStruct(0, 0, &g_sSensorPlots, &g_sKentec320x240x16_SSD2119, 0, 24, 320,
+                 216, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
+    CanvasStruct(0, 0, &g_sFaultHistory, &g_sKentec320x240x16_SSD2119, 0, 24, 320,
                  216, CANVAS_STYLE_FILL, ClrBlack, 0, 0, 0, 0, 0, 0),
 };
 
@@ -278,6 +287,7 @@ char *g_pcPanei32Names[] =
     "Motor",
     "Setup",
     "Plots",
+    "Faults",
 };
 
 RectangularButton(g_sPrevious, 0, 0, 0, &g_sKentec320x240x16_SSD2119, 0, 190,
@@ -298,7 +308,6 @@ static void HandlePreviousPanel(void) {
     g_ui32Panel--;
     WidgetAdd(WIDGET_ROOT, (tWidget *)(g_psPanels + g_ui32Panel));
     WidgetPaint((tWidget *)(g_psPanels + g_ui32Panel));
-    // UpdateBanner();
 
     if(g_ui32Panel == 0)
     {
@@ -331,7 +340,6 @@ static void HandleNextPanel(void) {
     g_ui32Panel++;
     WidgetAdd(WIDGET_ROOT, (tWidget *)(g_psPanels + g_ui32Panel));
     WidgetPaint((tWidget *)(g_psPanels + g_ui32Panel));
-    // UpdateBanner();
 
     if(g_ui32Panel == 1) {
         PushButtonImageOn(&g_sPrevious);
@@ -693,13 +701,6 @@ void SensorDataToArray() {
     graphY[3] = filtered.cabin_temperature_c_x10;
     graphY[4] = filtered.cabin_humidity_rh_x10;
     graphY[5] = filtered.distance_mm;
-    
-    // for testing without sensor data
-    // uint32_t rand_val = urand() % 500;
-    // uint32_t add_val = rand_val % 3 ? rand_val % 10 : -(rand_val % 10);
-    // graphY[0] = (lastGraphY[0] + add_val) % 500;
-
-
 }
 
 void OnCanvasPaint(tWidget *psWidget, tContext *psContext) {
@@ -841,6 +842,54 @@ static const char *FaultText(EvFaultCode_t fault)
     }
 }
 
+static const char *FaultHistoryText(EvFaultCode_t fault)
+{
+    switch (fault)
+    {
+        case EV_FAULT_POWER_LIMIT: return "Power";
+        case EV_FAULT_DISTANCE_LIMIT: return "Distance";
+        case EV_FAULT_USER_ESTOP: return "Button";
+        case EV_FAULT_STARTUP: return "Start";
+        case EV_FAULT_SENSOR: return "Sensors";
+        case EV_FAULT_MOTOR: return "Motor";
+        case EV_FAULT_COMMUNICATION: return "Comms";
+        default: return "Unknown";
+    }
+}
+
+void OnFaultHistoryPaint(tWidget *psWidget, tContext *psContext)
+{
+    GuiFaultHistoryEntry_t entry;
+    tRectangle listArea = {0, 24, 319, 189};
+    char rowText[40];
+    uint32_t index;
+    uint32_t count = GuiFaultHistory_Count();
+
+    (void)psWidget;
+    GrContextForegroundSet(psContext, ClrBlack);
+    GrRectFill(psContext, &listArea);
+    GrContextForegroundSet(psContext, ClrSilver);
+    GrContextFontSet(psContext, &g_sFontCm18);
+    GrStringDrawCentered(psContext, "Emergency Stop History", -1, 160, 40, 0);
+    GrContextFontSet(psContext, &g_sFontFixed6x8);
+
+    if (count == 0U)
+    {
+        GrStringDraw(psContext, "No emergency stops this session.", -1, 16, 68, 0);
+        return;
+    }
+
+    for (index = 0U; index < count; index++)
+    {
+        if (!GuiFaultHistory_GetNewest(index, &entry))
+        {
+            break;
+        }
+        usprintf(rowText, "%s  %s", entry.timestamp, FaultHistoryText(entry.fault));
+        GrStringDraw(psContext, rowText, -1, 16, 65 + (int32_t)(index * 16U), 0);
+    }
+}
+
 static void UpdateStartStopButton(EvMotorState_t state)
 {
     if (state == EV_MOTOR_STATE_ESTOP_BRAKING ||
@@ -951,17 +1000,10 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value) {
     g_temp_thresholds[ui32Idx] = i32Value;
     usprintf(pcSliderText[ui32Idx], "%3d", i32Value);
     SliderTextSet((tSliderWidget *)psWidget, pcSliderText[ui32Idx]);
-
-    /* Btn/slider cbs just mark state. LCD drawing stays in the UI task. */
-    // configUpdateRequest = true;
-    // RequestUiWork(GUI_REQ_NONE);
 }
 
 void ClockUpdate() {
-    int32_t seconds = g_elapsed_seconds % 60;
-    int32_t minutes = (g_elapsed_seconds / 60) % 60;
-    int32_t hours = (g_elapsed_seconds / 3600) % 24;
-    usprintf(clockBuf, "27/05/26 %02d:%02d:%02d", hours, minutes, seconds);
+    GuiAestClock_Format(clockBuf, sizeof(clockBuf));
     PushButtonTextSet((tPushButtonWidget *)&g_psClock, clockBuf);
     WidgetPaint((tWidget *)&g_psClock);
 }
@@ -1014,6 +1056,7 @@ static void prvGUITask( void *pvParameters ) {
 
     for (;;)
     {
+        char faultTimestamp[GUI_AEST_TIMESTAMP_BUFFER_SIZE];
         uint32_t notified = ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(5));
         if (notified) {
             if (plotToggle && g_ui32Panel == 2) {
@@ -1021,6 +1064,15 @@ static void prvGUITask( void *pvParameters ) {
             }            
         }
         EvFaultCode_t displayedFault = DisplayFault();
+        bool estopActive = (g_currentState == EV_MOTOR_STATE_ESTOP_BRAKING ||
+                            g_currentState == EV_MOTOR_STATE_FAULT_LATCHED);
+        GuiAestClock_Format(faultTimestamp, sizeof(faultTimestamp));
+        if (GuiFaultHistory_Observe(estopActive, displayedFault,
+                                    faultTimestamp) &&
+            g_ui32Panel == FAULT_HISTORY_PANEL_INDEX)
+        {
+            WidgetPaint((tWidget *)&g_sFaultHistory);
+        }
         if(g_currentState != g_lastState ||
            displayedFault != g_lastDisplayedFault ||
            nightConditions != g_lastDisplayedNight ||
@@ -1057,17 +1109,16 @@ static void prvGUITask( void *pvParameters ) {
 
         ProcessUiRequests();
 
-        // EvMotorState_t motorState = MotorControl_GetState();
-        // if(motorState != EV_MOTOR_STATE_ESTOP_BRAKING) {
         WidgetMessageQueueProcess();
         ProcessUiRequests();
-
-        // vTaskDelay(10);
     }
 }
 
 void GuiDashboard_Init(void) {
     EvSensorThresholds_t thresholds = SensorManager_GetThresholds();
+    /* No RTC is fitted; the build supplies an AEST starting point for this session. */
+    (void)GuiAestClock_Init(__DATE__, __TIME__);
+    GuiFaultHistory_Init();
     g_thresholds[1] = thresholds.max_motor_power_w;
     g_thresholds[2] = thresholds.min_distance_mm;
     g_thresholds[3] = (uint32_t)thresholds.cooling_threshold_c_x10;
@@ -1090,13 +1141,20 @@ void GuiDashboard_Init(void) {
 void GuiDashboard_Update(void)
 {
     EvMotorState_t motorState = MotorControl_GetState();
+    TickType_t currentTicks;
+    TickType_t elapsedTicks;
+    TickType_t oneSecondTicks = pdMS_TO_TICKS(1000U);
+    uint32_t elapsedSeconds;
+
     g_currentState = motorState;
 
-    TickType_t currentTicks = xTaskGetTickCount();
-    if((currentTicks - g_lastTimerTicks) >= pdMS_TO_TICKS(1000)) {
-        g_elapsed_seconds++;
+    currentTicks = xTaskGetTickCount();
+    elapsedTicks = currentTicks - g_lastTimerTicks;
+    elapsedSeconds = (uint32_t)(elapsedTicks / oneSecondTicks);
+    if(elapsedSeconds > 0U) {
+        GuiAestClock_AdvanceSeconds(elapsedSeconds);
         clockUpdateRequest = true;
-        g_lastTimerTicks = currentTicks;
+        g_lastTimerTicks += ((TickType_t)elapsedSeconds * oneSecondTicks);
         RequestUiWork(GUI_REQ_NONE);
     }
 

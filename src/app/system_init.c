@@ -52,28 +52,11 @@ void AppModules_Init(void)
     // Integration_Init();
     // SerialPlotter_Init();
 
-    UARTprintf("AppModules_Init starting\r\n");
-
     MotorControl_Init();
-    UARTprintf("MotorControl_Init done\r\n");
-
     MotorStateMachine_Init();
-    UARTprintf("MotorStateMachine_Init done\r\n");
-
     SensorManager_Init();
-    UARTprintf("SensorManager_Init done\r\n");
-
     GuiManager_Init();
-    UARTprintf("GuiManager_Init done\r\n");
-
     FaultManager_Init();
-    UARTprintf("FaultManager_Init done\r\n");
-
     Integration_Init();
-    UARTprintf("Integration_Init done\r\n");
-
     SerialPlotter_Init();
-    UARTprintf("SerialPlotter_Init done\r\n");
-
-    UARTprintf("AppModules_Init complete\r\n");
 }

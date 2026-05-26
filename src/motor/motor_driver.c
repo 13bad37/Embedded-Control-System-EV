@@ -41,13 +41,7 @@ void MotorDriver_SetCommutationEnabled(uint8_t enabled)
 
 void MotorDriver_Init(void)
 {
-    UARTprintf("SysClock value: %d\r\n", g_ui32SysClock);
-    UARTprintf("PWM period: %d\r\n", PROJECT_MOTORLIB_PWM_PERIOD_US);
-    UARTprintf("initMotorLib starting\r\n");
     bool result = initMotorLib(PROJECT_MOTORLIB_PWM_PERIOD_US);
-    UARTprintf("initMotorLib returned: %d\r\n", result);
-    /* REMOVED: duplicate initMotorLib call was here */
-    UARTprintf("initMotorLib done\r\n");
 
     /* Hardware timer for hall edge timestamping */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_TIMER1);
@@ -55,9 +49,6 @@ void MotorDriver_Init(void)
     TimerConfigure(TIMER1_BASE, TIMER_CFG_PERIODIC_UP);
     TimerLoadSet(TIMER1_BASE, TIMER_A, 0xFFFFFFFF);
     TimerEnable(TIMER1_BASE, TIMER_A);
-    UARTprintf("Hall timestamp timer started\r\n");
-
-    UARTprintf("GPIO peripheral enable starting\r\n");
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOM);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOH);
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPION);
@@ -65,32 +56,26 @@ void MotorDriver_Init(void)
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOM));
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOH));
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPION));
-    UARTprintf("GPIO peripherals ready\r\n");
 
     GPIOPinTypeGPIOInput(GPIO_PORTM_BASE, GPIO_PIN_3);
     GPIOPinTypeGPIOInput(GPIO_PORTH_BASE, GPIO_PIN_2);
     GPIOPinTypeGPIOInput(GPIO_PORTN_BASE, GPIO_PIN_2);
-    UARTprintf("GPIO pins configured\r\n");
 
     GPIOIntTypeSet(GPIO_PORTM_BASE, GPIO_PIN_3, GPIO_BOTH_EDGES);
     GPIOIntTypeSet(GPIO_PORTH_BASE, GPIO_PIN_2, GPIO_BOTH_EDGES);
     GPIOIntTypeSet(GPIO_PORTN_BASE, GPIO_PIN_2, GPIO_BOTH_EDGES);
-    UARTprintf("GPIO interrupts configured\r\n");
 
     GPIOIntRegister(GPIO_PORTM_BASE, HallSensorHandler);
     GPIOIntRegister(GPIO_PORTH_BASE, HallSensorHandler);
     GPIOIntRegister(GPIO_PORTN_BASE, HallSensorHandler);
-    UARTprintf("GPIO interrupts registered\r\n");
 
     GPIOIntEnable(GPIO_PORTM_BASE, GPIO_INT_PIN_3);
     GPIOIntEnable(GPIO_PORTH_BASE, GPIO_INT_PIN_2);
     GPIOIntEnable(GPIO_PORTN_BASE, GPIO_INT_PIN_2);
-    UARTprintf("GPIO interrupts enabled\r\n");
 
     IntPrioritySet(INT_GPIOM, 0xC0);
     IntPrioritySet(INT_GPIOH, 0xC0);
     IntPrioritySet(INT_GPION, 0xC0);
-    UARTprintf("Priorities set\r\n");
 }
 
 static void ApplyKickstartDuty(void)

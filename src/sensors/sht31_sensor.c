@@ -31,8 +31,7 @@ void Sht31Sensor_Init(void)
 void Sht31Sensor_Sample(void)
 {
     uint8_t rxData[6] = {0};
-    uint16_t rawTemp;
-    uint16_t rawHumid;
+
 
     TickType_t currentTick;
 
@@ -54,8 +53,8 @@ void Sht31Sensor_Sample(void)
 
     if (readI2C2_SHT31(SHT31_I2C_ADDRESS, rxData, 6))
     {
-        rawTemp  = ((uint16_t)rxData[0] << 8) | rxData[1];
-        rawHumid = ((uint16_t)rxData[3] << 8) | rxData[4];
+        uint16_t rawTemp  = ((uint16_t)rxData[0] << 8) | rxData[1];
+        uint16_t rawHumid = ((uint16_t)rxData[3] << 8) | rxData[4];
 
         temperatureC = (int32_t)(-45.0f + (175.0f * ((float)rawTemp / 65535.0f)));
         humidityRh = (int32_t)(100.0f * ((float)rawHumid / 65535.0f));
