@@ -13,6 +13,7 @@
 #include "utils/uartstdio.h"
 #include "common/project_config.h"
 #include "rtos/message_bus.h"
+#include "motor/motor_control.h"
 
 #define VL53L0X_I2C_ADDRESS             0x29
 #define VL53L0X_REG_SYSRANGE_START      0x00
@@ -23,7 +24,7 @@
 #define VL53L0X_START_CONTINUOUS        0x02
 #define VL53L0X_CLEAR_INTERRUPT         0x01
 
-#define VL53L0X_SAMPLE_PERIOD_MS        50   // 20hz or higher  1000/50 = 20
+#define VL53L0X_SAMPLE_PERIOD_MS        50
 #define VL53L0X_INVALID_DISTANCE_MM     8190
 #define VL53L0X_ESTOP_DISTANCE_MM       300U
 #define VL53L0X_NOISE_FLOOR_MM          30U

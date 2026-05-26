@@ -63,7 +63,8 @@ void FaultManager_Run(void)
     }
 
     /* Reset estop latch when system returns to idle */
-    if (MotorControl_GetState() == EV_MOTOR_STATE_IDLE)
+    if (MotorControl_GetState() == EV_MOTOR_STATE_IDLE ||
+        MotorControl_GetState() == EV_MOTOR_STATE_STARTING)
     {
         s_estopTriggered = false;
     }

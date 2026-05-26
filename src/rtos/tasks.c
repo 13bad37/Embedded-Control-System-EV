@@ -21,20 +21,17 @@
 #include "app/adc_init.h"
 #include "sensors/motor_power_sensor.h"
 
+static bool s_hasBeenStarted = false;
 
 void MotorControlTask(void *parameters)
 {
     (void)parameters;
-    UARTprintf("MotorControlTask started\r\n");
-
     SemaphoreHandle_t estopSem = MessageBus_GetEstopSemaphore();
 
-    MotorControl_SetSpeed(1100U);  /* start with a moderate speed command to reduce startup current spike */
-    MotorControl_Start();
+    MotorControl_SetSpeed(250U); /* default speed, can be changed by user via GUI */
 
     for (;;)
     {
-        /* Check for e-stop signal — only act if motor is running or starting */
         if (xSemaphoreTake(estopSem, 0) == pdTRUE)
         {
             EvMotorState_t currentState = MotorControl_GetState();
@@ -43,7 +40,6 @@ void MotorControlTask(void *parameters)
             {
                 UARTprintf("E-STOP received by motor task\r\n");
                 MotorControl_EStop(EV_FAULT_DISTANCE_LIMIT);
-
                 while (xSemaphoreTake(estopSem, 0) == pdTRUE) {}
             }
         }

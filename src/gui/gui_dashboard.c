@@ -92,6 +92,7 @@ volatile bool configUpdateRequest = false;
 volatile bool clockUpdateRequest = true;
 bool nightConditions = false;
 TickType_t g_lastTimerTicks;
+static uint32_t g_lastUserSpeed = 250U;
 
 typedef enum
 {
@@ -531,7 +532,8 @@ static void HandleThresholdButtonPress(void) {
     if(g_ui32CurrentConfig == 0) {
         g_thresholds[0] = g_temp_thresholds[0];
         g_thresholds[1] = g_temp_thresholds[1];
-        MotorControl_SetSpeed(g_thresholds[0]);
+        g_lastUserSpeed = g_thresholds[0];    /* save the user speed */
+        MotorControl_SetSpeed(g_lastUserSpeed);
     }
     else if(g_ui32CurrentConfig == 1) {
         g_thresholds[2] = g_temp_thresholds[2];
@@ -612,9 +614,11 @@ void OnFaultLatched(void) {
 static void HandleFaultAcknowledge(void) {
     faultLatched = false;
     MotorStateMachine_AcknowledgeFault();
-    MotorState = IDLE;
-    PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Start Motor");
-    PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrLightGreen);
+    MotorControl_SetSpeed(g_lastUserSpeed);    /* restore previous speed */
+    MotorControl_Start();
+    MotorState = RUNNING;
+    PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Stop Motor");
+    PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrRedMask);
     WidgetRemove((tWidget *)(g_psPanels + g_ui32Panel));
     WidgetAdd(WIDGET_ROOT, (tWidget *)g_psPanels);
     WidgetAdd((tWidget *)g_psPanels, (tWidget *)&g_psStartStopButton);
@@ -697,6 +701,7 @@ static void HandleStartStopButton(void) {
     if (motorState == EV_MOTOR_STATE_IDLE || MotorState == IDLE) {
         PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Stop Motor");
         PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrRedMask);
+        MotorControl_SetSpeed(g_lastUserSpeed);
         MotorControl_Start();
         MotorState = RUNNING;
     } else {
@@ -706,8 +711,6 @@ static void HandleStartStopButton(void) {
         MotorState = IDLE;
     }
     WidgetPaint((tWidget *)&g_psStartStopButton);
-
-    // UpdateBanner();    
 }
 
 void OnStartStopButtonPress(tWidget *psWidget) {
