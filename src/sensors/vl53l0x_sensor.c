@@ -68,6 +68,13 @@ void Vl53l0xSensor_Sample(void)
         }
        
     }
+    else
+    {
+        /* Distance is clear — reset latch so e-stop can fire again */
+        s_estopFired = false;
+    }
+
+
      SensorMsg_t msg = { .type = SENSOR_MSG_DISTANCE, .value = (uint32_t)distanceMm };
 
         if (rawdataQueue != NULL)
