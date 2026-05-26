@@ -615,10 +615,8 @@ static void HandleFaultAcknowledge(void) {
     faultLatched = false;
     MotorStateMachine_AcknowledgeFault();
     MotorControl_SetSpeed(g_lastUserSpeed);    /* restore previous speed */
-    MotorControl_Start();
-    MotorState = RUNNING;
-    PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Stop Motor");
-    PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrRedMask);
+    PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Start Motor");
+    PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrLightGreen);
     WidgetRemove((tWidget *)(g_psPanels + g_ui32Panel));
     WidgetAdd(WIDGET_ROOT, (tWidget *)g_psPanels);
     WidgetAdd((tWidget *)g_psPanels, (tWidget *)&g_psStartStopButton);
@@ -907,7 +905,7 @@ static void prvGUITask( void *pvParameters ) {
             ClockUpdate();
             clockUpdateRequest = false;
         }
-
+        
 
         ProcessUiRequests();
 
