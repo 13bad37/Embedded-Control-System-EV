@@ -10,8 +10,10 @@ typedef struct {
     bool eStopRequested;
     bool faultAcknowledged;
     bool hallFeedbackValid;
+    bool safetyInterlock;
     uint32_t actual_rpm;
     EvFaultCode_t activeFault;
+    EvFaultCode_t interlockFault;
 } EvMotorSmInputs_t;
 
 static EvMotorState_t    s_motorState   = EV_MOTOR_STATE_IDLE;
@@ -28,7 +30,8 @@ static void EnterRunning(void)
 static void EnterEStopBraking(EvFaultCode_t fault)
 {
     UARTprintf("State: ESTOP_BRAKING fault=%d\r\n", fault);
-    MotorDriver_SetCommutationEnabled(0U);
+    /* Keep commutation on while moving so the ramped brake command can work. */
+    MotorDriver_SetCommutationEnabled(1U);
     s_latchedFault = fault;
     s_motorState = EV_MOTOR_STATE_ESTOP_BRAKING;
 }
@@ -36,6 +39,7 @@ static void EnterEStopBraking(EvFaultCode_t fault)
 static void EnterFaultLatched(void)
 {
     UARTprintf("State: FAULT_LATCHED\r\n");
+    MotorDriver_SetPwmDuty(0U);
     MotorDriver_SetCommutationEnabled(0U);
     MotorDriver_DisableOutputs();
     s_motorState = EV_MOTOR_STATE_FAULT_LATCHED;
@@ -44,6 +48,7 @@ static void EnterFaultLatched(void)
 static void EnterIdle(void)
 {
     UARTprintf("State: IDLE\r\n");
+    MotorDriver_SetPwmDuty(0U);
     MotorDriver_SetCommutationEnabled(0U);
     MotorDriver_DisableOutputs();
     s_motorState = EV_MOTOR_STATE_IDLE;
@@ -52,11 +57,28 @@ static void EnterIdle(void)
 static void EnterStarting(void)
 {
     UARTprintf("State: STARTING\r\n");
+    /* Set the state first, bc outputs are live from this point onwards. */
+    s_motorState = EV_MOTOR_STATE_STARTING;
+    s_inputs.hallFeedbackValid = false;
     MotorDriver_SetCommutationEnabled(1U);
     MotorDriver_EnableOutputs();
-    MotorDriver_KickstartPlaceholder();
-    s_inputs.hallFeedbackValid = false;
-    s_motorState = EV_MOTOR_STATE_STARTING;
+    MotorDriver_BeginKickstart();
+}
+
+static void EnterStopping(void)
+{
+    UARTprintf("State: STOPPING\r\n");
+    /* Normal stop stays controlled; the regular 500 RPM/s ramp does the work. */
+    s_motorState = EV_MOTOR_STATE_STOPPING;
+}
+
+static EvFaultCode_t RequestedFault(void)
+{
+    if (s_inputs.safetyInterlock && s_inputs.interlockFault != EV_FAULT_NONE)
+    {
+        return s_inputs.interlockFault;
+    }
+    return s_inputs.activeFault;
 }
 
 void MotorStateMachine_Init(void)
@@ -73,15 +95,25 @@ void MotorStateMachine_Run(void)
             if (s_inputs.startRequested)
             {
                 s_inputs.startRequested = false;
-                EnterStarting();
+                if (!s_inputs.safetyInterlock)
+                {
+                    EnterStarting();
+                }
             }
+            s_inputs.eStopRequested = false;
             break;
 
         case EV_MOTOR_STATE_STARTING:
-            if (s_inputs.eStopRequested)
+            if (s_inputs.eStopRequested || s_inputs.safetyInterlock)
             {
                 s_inputs.eStopRequested = false;
-                EnterEStopBraking(s_inputs.activeFault);
+                EnterEStopBraking(RequestedFault());
+                break;
+            }
+            if (s_inputs.stopRequested)
+            {
+                s_inputs.stopRequested = false;
+                EnterStopping();
                 break;
             }
             if (s_inputs.hallFeedbackValid)
@@ -91,20 +123,35 @@ void MotorStateMachine_Run(void)
             break;
 
         case EV_MOTOR_STATE_RUNNING:
-            if (s_inputs.eStopRequested)
+            if (s_inputs.eStopRequested || s_inputs.safetyInterlock)
             {
                 s_inputs.eStopRequested = false;
-                EnterEStopBraking(s_inputs.activeFault);
+                EnterEStopBraking(RequestedFault());
                 break;
             }
             if (s_inputs.stopRequested)
             {
                 s_inputs.stopRequested = false;
+                EnterStopping();
+            }
+            break;
+
+        case EV_MOTOR_STATE_STOPPING:
+            if (s_inputs.eStopRequested || s_inputs.safetyInterlock)
+            {
+                s_inputs.eStopRequested = false;
+                EnterEStopBraking(RequestedFault());
+                break;
+            }
+            if (s_inputs.actual_rpm == 0U)
+            {
                 EnterIdle();
             }
             break;
 
         case EV_MOTOR_STATE_ESTOP_BRAKING:
+            s_inputs.startRequested = false;
+            s_inputs.stopRequested = false;
             if (s_inputs.actual_rpm == 0U)
             {
                 EnterFaultLatched();
@@ -112,6 +159,8 @@ void MotorStateMachine_Run(void)
             break;
 
         case EV_MOTOR_STATE_FAULT_LATCHED:
+            s_inputs.startRequested = false;
+            s_inputs.stopRequested = false;
             if (s_inputs.faultAcknowledged)
             {
                 s_inputs.faultAcknowledged = false;
@@ -128,28 +177,49 @@ void MotorStateMachine_Run(void)
 
 void MotorStateMachine_RequestStart(void)
 {
-    s_inputs.startRequested = true;
+    if (s_motorState == EV_MOTOR_STATE_IDLE)
+    {
+        s_inputs.startRequested = true;
+    }
 }
 
 void MotorStateMachine_RequestStop(void)
 {
-    s_inputs.stopRequested = true;
+    if (s_motorState == EV_MOTOR_STATE_STARTING ||
+        s_motorState == EV_MOTOR_STATE_RUNNING)
+    {
+        s_inputs.stopRequested = true;
+    }
 }
 
 void MotorStateMachine_RequestEStop(EvFaultCode_t fault)
 {
-    s_inputs.activeFault    = fault;
-    s_inputs.eStopRequested = true;
+    if (s_motorState == EV_MOTOR_STATE_STARTING ||
+        s_motorState == EV_MOTOR_STATE_RUNNING ||
+        s_motorState == EV_MOTOR_STATE_STOPPING)
+    {
+        s_inputs.activeFault    = fault;
+        s_inputs.eStopRequested = true;
+    }
 }
 
 void MotorStateMachine_AcknowledgeFault(void)
 {
-    s_inputs.faultAcknowledged = true;
+    if (s_motorState == EV_MOTOR_STATE_FAULT_LATCHED)
+    {
+        s_inputs.faultAcknowledged = true;
+    }
 }
 
 void MotorStateMachine_SetHallValid(bool valid)
 {
     s_inputs.hallFeedbackValid = valid;
+}
+
+void MotorStateMachine_SetSafetyInterlock(bool active, EvFaultCode_t fault)
+{
+    s_inputs.safetyInterlock = active;
+    s_inputs.interlockFault = active ? fault : EV_FAULT_NONE;
 }
 
 void MotorStateMachine_UpdateActualRpm(uint32_t rpm)

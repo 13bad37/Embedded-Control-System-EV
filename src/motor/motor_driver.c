@@ -22,6 +22,17 @@ static volatile uint32_t s_lastEdgeTimestamp = 0U;
 static volatile uint32_t s_edgePeriodTicks   = 0U;
 static volatile uint8_t  s_hallEdgeValid     = 0U;
 static volatile uint8_t s_commutationEnabled = 1U;
+static uint32_t s_kickstartElapsedMs = 0U;
+static uint32_t s_kickstartStepElapsedMs = 0U;
+static uint16_t s_kickstartDuty = 0U;
+static uint8_t s_kickstartActive = 0U;
+static uint8_t s_kickstartTimedOut = 0U;
+
+#define KICKSTART_INITIAL_DUTY       (5U)
+#define KICKSTART_MAX_DUTY           (30U)
+#define KICKSTART_DUTY_STEP          (2U)
+#define KICKSTART_STEP_PERIOD_MS     (150U)
+#define KICKSTART_TIMEOUT_MS         (3000U)
 
 void MotorDriver_SetCommutationEnabled(uint8_t enabled)
 {
@@ -82,45 +93,72 @@ void MotorDriver_Init(void)
     UARTprintf("Priorities set\r\n");
 }
 
-void MotorDriver_KickstartPlaceholder(void)
+static void ApplyKickstartDuty(void)
 {
-    /* Reset edge count so we're counting fresh edges only */
+    bool hall_a = (bool)(GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_3) & GPIO_PIN_3);
+    bool hall_b = (bool)(GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_2) & GPIO_PIN_2);
+    bool hall_c = (bool)(GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_2) & GPIO_PIN_2);
+
+    updateMotor(hall_a, hall_b, hall_c);
+    setDuty(s_kickstartDuty);
+}
+
+void MotorDriver_BeginKickstart(void)
+{
+    /* Start small and return straight away so E-stop still gets checked. */
     s_hallEdgeCount     = 0U;
     s_hallEdgeValid     = 0U;
     s_edgePeriodTicks   = 0U;
     s_lastEdgeTimestamp = 0U;
+    s_kickstartElapsedMs = 0U;
+    s_kickstartStepElapsedMs = 0U;
+    s_kickstartDuty = KICKSTART_INITIAL_DUTY;
+    s_kickstartActive = 1U;
+    s_kickstartTimedOut = 0U;
+    ApplyKickstartDuty();
+}
 
-    /* Wait 200ms — if motor is already spinning edges will accumulate */
-    vTaskDelay(pdMS_TO_TICKS(200));
-
-    if (s_hallEdgeCount > 2U)
+void MotorDriver_RunKickstart(uint32_t elapsed_ms)
+{
+    if (!s_kickstartActive)
     {
-        UARTprintf("Motor already spinning — skipping kickstart\r\n");
         return;
     }
 
-    uint32_t edgesBefore = s_hallEdgeCount;
-
-    for (uint16_t duty = 5U; duty <= 30U; duty += 2U)
+    if (s_hallEdgeCount >= HALL_VALID_EDGE_THRESHOLD)
     {
-        bool hall_a = (bool)(GPIOPinRead(GPIO_PORTM_BASE, GPIO_PIN_3) & GPIO_PIN_3);
-        bool hall_b = (bool)(GPIOPinRead(GPIO_PORTH_BASE, GPIO_PIN_2) & GPIO_PIN_2);
-        bool hall_c = (bool)(GPIOPinRead(GPIO_PORTN_BASE, GPIO_PIN_2) & GPIO_PIN_2);
-
-        updateMotor(hall_a, hall_b, hall_c);
-        setDuty(duty);
-
-        UARTprintf("Kickstart: duty=%d\r\n", duty);
-        vTaskDelay(pdMS_TO_TICKS(150));
-
-        if (MotorDriver_GetHallEdgeCount() > edgesBefore + 2U)
-        {
-            UARTprintf("Motor started at duty=%d\r\n", duty);
-            return;
-        }
+        s_kickstartActive = 0U;
+        return;
     }
 
-    UARTprintf("WARNING: kickstart complete\r\n");
+    s_kickstartElapsedMs += elapsed_ms;
+    s_kickstartStepElapsedMs += elapsed_ms;
+    if (s_kickstartElapsedMs >= KICKSTART_TIMEOUT_MS)
+    {
+        s_kickstartActive = 0U;
+        s_kickstartTimedOut = 1U;
+        UARTprintf("E-STOP: startup could not get hall feedback\r\n");
+        return;
+    }
+
+    if (s_kickstartStepElapsedMs >= KICKSTART_STEP_PERIOD_MS)
+    {
+        s_kickstartStepElapsedMs = 0U;
+        if (s_kickstartDuty < KICKSTART_MAX_DUTY)
+        {
+            s_kickstartDuty += KICKSTART_DUTY_STEP;
+            if (s_kickstartDuty > KICKSTART_MAX_DUTY)
+            {
+                s_kickstartDuty = KICKSTART_MAX_DUTY;
+            }
+            ApplyKickstartDuty();
+        }
+    }
+}
+
+uint8_t MotorDriver_KickstartTimedOut(void)
+{
+    return s_kickstartTimedOut;
 }
 
 void MotorDriver_EnableOutputs(void)

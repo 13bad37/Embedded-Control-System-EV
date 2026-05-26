@@ -3,7 +3,9 @@
 #include <stdint.h>
 
 void MotorDriver_Init(void);
-void MotorDriver_KickstartPlaceholder(void);
+void MotorDriver_BeginKickstart(void);
+void MotorDriver_RunKickstart(uint32_t elapsed_ms);
+uint8_t MotorDriver_KickstartTimedOut(void);
 void MotorDriver_EnableOutputs(void);
 void MotorDriver_DisableOutputs(void);
 void MotorDriver_SetPwmDuty(uint16_t duty_per_mille);
@@ -12,4 +14,3 @@ uint32_t MotorDriver_GetHallEdgeCount(void);
 uint32_t MotorDriver_GetRpm(void);
 void MotorDriver_ResetHallState(void);
 void MotorDriver_SetCommutationEnabled(uint8_t enabled);
-

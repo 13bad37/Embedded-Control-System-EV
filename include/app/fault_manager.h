@@ -5,4 +5,4 @@
 void FaultManager_Init(void);
 void FaultManager_Run(void);
 void FaultManager_RecordFault(EvFaultCode_t fault);
-
+EvFaultCode_t FaultManager_GetActiveFault(void);

@@ -32,7 +32,10 @@ void MotorPowerSensor_Sample(void)
 {
     uint32_t pollCount = POWER_ADC_POLL_LIMIT;
 
-    /* Touch runs on ADC0/timer; this ADC1 sequence runs only when asked here. */
+    /*
+     * Read ADC1 only when this function asks for it. Touch uses a timer ADC
+     * path, so screen presses can't trigger fake power samples anymore.
+     */
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
     ADCProcessorTrigger(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
     while ((ADCIntStatus(POWER_ADC_BASE, POWER_ADC_SEQUENCER, false) == 0U) &&
@@ -47,20 +50,19 @@ void MotorPowerSensor_Sample(void)
     }
 
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
-    ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf); //read both adc samples
+    ADCSequenceDataGet(POWER_ADC_BASE, POWER_ADC_SEQUENCER, adcBuf);
 
     if (rawdataQueue != NULL)
     {
         SensorMsg_t msgA = { .type = SENSOR_MSG_POWERA, .value = adcBuf[0] };
         SensorMsg_t msgB = { .type = SENSOR_MSG_POWERB, .value = adcBuf[1] };
-
-        xQueueSendToBack(rawdataQueue, &msgA, 0);
-        xQueueSendToBack(rawdataQueue, &msgB, 0);
+        (void)xQueueSendToBack(rawdataQueue, &msgA, 0);
+        (void)xQueueSendToBack(rawdataQueue, &msgB, 0);
     }
 }
 
 void MotorPower_ADC_ISR(void)
 {
-    /* Kept for the startup vector; task sampling leaves this interrupt masked. */
+    /* Kept for the vector table; normal power sampling keeps this IRQ masked. */
     ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
 }

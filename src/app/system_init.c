@@ -37,7 +37,6 @@ void SystemInit_ConfigureBoard(void)
                                             PROJECT_SYSTEM_CLOCK_HZ);
 
   
-    rawdataQueue = xQueueCreate(10, sizeof(SensorMsg_t));
     I2C2_Driver_Init(g_ui32SysClock);   
     UART_Driver_Init(g_ui32SysClock);
     IntMasterEnable();

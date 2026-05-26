@@ -1,11 +1,14 @@
 #pragma once
 
 #include "common/sensor_types.h"
+#include "common/project_types.h"
+#include <stdbool.h>
 #include "queue.h"
 
 
 void SensorManager_Init(void);
 void SensorManager_Poll(void);
+void SensorManager_PollEnvironment(void);
 typedef enum {
     SENSOR_MSG_SPEED,
     SENSOR_MSG_LIGHT,
@@ -27,3 +30,5 @@ EvSensorData_t SensorManager_GetFilteredData(void);
 EvSensorThresholds_t SensorManager_GetThresholds(void);
 EvSensorThresholds_t SensorManager_CheckThresholds(void);
 void SensorManager_SetThresholds(const EvSensorThresholds_t *thresholds);
+EvFaultCode_t SensorManager_GetActiveFault(void);
+bool SensorManager_HasAmbientLightReading(void);

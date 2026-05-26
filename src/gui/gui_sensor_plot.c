@@ -16,5 +16,5 @@ void GuiSensorPlot_Update(void)
         xTaskNotifyGive(xDisplayTaskHandle);
     }
     
-    /* TODO: plot at least 5 seconds of motor/sensor history later. */
+    /* Dashboard canvas keeps the ten-second rolling trace; this wakes its paint. */
 }

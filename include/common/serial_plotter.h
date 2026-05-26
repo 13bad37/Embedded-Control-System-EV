@@ -4,5 +4,6 @@
 #include "common/sensor_types.h"
 
 void SerialPlotter_Init(void);
-void SerialPlotter_SendMotorFrame(const EvMotorStatus_t *status);
-void SerialPlotter_SendSensorFrame(const EvSensorDataRaw_t *raw, const EvSensorData_t *filtered);
+void SerialPlotter_SendFrame(const EvMotorStatus_t *status,
+                             const EvSensorDataRaw_t *raw,
+                             const EvSensorData_t *filtered);

@@ -30,18 +30,21 @@ void prvADCInit(void)
     // Each reported sample is average of 4 hardware conversions
     ADCHardwareOversampleConfigure(POWER_ADC_BASE, 4);
 
-    // tell the ADC to be triggered by the processor
+    /*
+     * Power is triggered directly by its task, bc the touch screen also uses
+     * timer-triggered ADC reads and tapping it must not get into this graph.
+     */
     ADCSequenceConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER,
                          ADC_TRIGGER_PROCESSOR, 0);
 
     // Step 0: sample ISENA (AIN0)
     ADCSequenceStepConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER, 0,
                              POWER_ADC_CH_A);
-    /*
-     * The task polls the raw completion bit. IE raises that bit, while leaving
-     * the ADC interrupt masked keeps this path out of the ISR.
-     */
+    /* End the two-channel sample; the task grabs the finished raw pair. */
     ADCSequenceStepConfigure(POWER_ADC_BASE, POWER_ADC_SEQUENCER, 1,
                              POWER_ADC_CH_B | ADC_CTL_IE | ADC_CTL_END);
     ADCSequenceEnable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
+    ADCIntClear(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
+    ADCIntDisable(POWER_ADC_BASE, POWER_ADC_SEQUENCER);
+    IntDisable(INT_ADC1SS2);
 }

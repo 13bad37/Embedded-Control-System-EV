@@ -14,6 +14,8 @@
 #include "driverlib/interrupt.h"
 #include "driverlib/pin_map.h"
 #include "app/power_timer_init.h"
+#include "common/project_config.h"
+#include "sensors/motor_power_sensor.h"
 
 
 
@@ -24,10 +26,12 @@ void powerTimerInit(void)
  
     TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
 
-    TimerLoadSet(TIMER2_BASE, TIMER_A, 800000); //150hz
+    /* Raw current data needs >=150 Hz for the assignment and for fast trips. */
+    TimerLoadSet(TIMER2_BASE, TIMER_A,
+                 (PROJECT_SYSTEM_CLOCK_HZ / POWER_SAMPLE_RATE_HZ) - 1U);
  
     TimerControlTrigger(TIMER2_BASE, TIMER_A, true); 
-    TimerADCEventSet(TIMER2_BASE, TIMER_ADC_TIMEOUT_A); //tell to trigger which ADC
+    TimerADCEventSet(TIMER2_BASE, TIMER_ADC_TIMEOUT_A); /* Fire the ADC on each tick. */
 
     TimerEnable(TIMER2_BASE, TIMER_A);
 }
