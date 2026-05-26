@@ -55,6 +55,7 @@ uint32_t graphY[6];
 uint32_t lastGraphY[6];
 bool plotToggle = false;
 bool faultLatched = false;
+bool faultAcknowledged = false;
 uint32_t g_thresholds[4] = {250, 250, 250, 25};
 uint32_t g_temp_thresholds[4] = {250, 250, 250, 25};
 uint32_t g_max_values[6] = {500, 500, 1000, 50, 100, 500};
@@ -592,6 +593,7 @@ void OnConfigButtonPress(tWidget *psWidget) {
 
 void OnFaultLatched(void) {
     faultLatched = true;
+    faultAcknowledged = false;
     WidgetRemove((tWidget *)(g_psPanels + g_ui32Panel));
     g_ui32Panel = 0;
     WidgetAdd(WIDGET_ROOT, (tWidget *)g_psPanels);
@@ -609,11 +611,11 @@ void OnFaultLatched(void) {
     PushButtonTextOff(&g_sPrevious);
     PushButtonFillOn(&g_sPrevious);
     WidgetPaint((tWidget *)&g_sPrevious);
-    UpdateBanner();
 }
 
 static void HandleFaultAcknowledge(void) {
     faultLatched = false;
+    faultAcknowledged = true;
     MotorStateMachine_AcknowledgeFault();
     MotorControl_SetSpeed(g_lastUserSpeed);    /* restore previous speed */
     PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Start Motor");
@@ -630,7 +632,6 @@ static void HandleFaultAcknowledge(void) {
     PushButtonTextOn(&g_sNext);
     PushButtonFillOff(&g_sNext);
     WidgetPaint((tWidget *)&g_sNext);
-    UpdateBanner();
 }
 
 void OnFaultAcknowledgeButtonPress(tWidget *psWidget) {
@@ -819,15 +820,12 @@ void OnSliderChange(tWidget *psWidget, int32_t i32Value) {
 }
 
 void ClockUpdate() {
-    EvMotorState_t motorState = MotorControl_GetState();
-    if (motorState == EV_MOTOR_STATE_ESTOP_BRAKING || motorState == EV_MOTOR_STATE_FAULT_LATCHED || g_ui32Panel != 0) return;
     int32_t seconds = g_elapsed_seconds % 60;
     int32_t minutes = (g_elapsed_seconds / 60) % 60;
     int32_t hours = (g_elapsed_seconds / 3600) % 12;
     usprintf(clockBuf, "27/05/26 %02d:%02d:%02d", hours, minutes, seconds);
     PushButtonTextSet((tPushButtonWidget *)&g_psClock, clockBuf);
     WidgetPaint((tWidget *)&g_psClock);
-
 }
 
 static void ProcessUiRequests(void)
@@ -894,7 +892,11 @@ static void prvGUITask( void *pvParameters ) {
         }
 
         if(!faultLatched && g_currentState == EV_MOTOR_STATE_FAULT_LATCHED) {
-            OnFaultLatched();
+            if(faultAcknowledged) {
+                faultAcknowledged = false;
+            } else {
+                OnFaultLatched();
+            }            
         }
 
         if(configUpdateRequest) {
