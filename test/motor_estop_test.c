@@ -95,25 +95,16 @@ int main(void)
     MotorControl_Run();
     assert(s_motorStatus.reference_speed_rpm > s_fakeRpm);
 
+    unsigned int disablesBeforeStop = s_disableCalls;
     MotorControl_Stop();
     MotorStateMachine_Run();
-    assert(MotorStateMachine_GetState() == EV_MOTOR_STATE_STOPPING);
-    MotorControl_Run();
-    assert(s_motorStatus.reference_speed_rpm < s_fakeRpm);
-    assert(s_lastDuty == 0U);
-    assert(s_brakeCalls == 0U);
-
-    s_fakeRpm = 80U;
-    MotorControl_Run();
-    assert(s_motorStatus.reference_speed_rpm > s_fakeRpm);
-    assert(s_lastDuty > 0U);
-
-    s_fakeRpm = 0U;
-    s_motorStatus.reference_speed_rpm = 0U;
-    MotorControl_Run();
-    assert(s_lastDuty == 0U);
-    MotorStateMachine_Run();
     assert(MotorStateMachine_GetState() == EV_MOTOR_STATE_IDLE);
+    assert(s_lastDuty == 0U);
+    assert(s_commutationEnabled == 0U);
+    assert(s_disableCalls == disablesBeforeStop + 1U);
+    assert(s_brakeCalls == 0U);
+    MotorControl_Run();
+    assert(s_lastDuty == 0U);
 
     s_fakeRpm = 420U;
     MotorControl_SetSpeed(400U);

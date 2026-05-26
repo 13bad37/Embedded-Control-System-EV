@@ -137,7 +137,8 @@ void MotorStateMachine_Run(void)
             if (s_inputs.stopRequested)
             {
                 s_inputs.stopRequested = false;
-                EnterStopping();
+                /* A user stop must drop drive now, not keep regulating speed down. */
+                EnterIdle();
             }
             break;
 
