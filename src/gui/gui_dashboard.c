@@ -356,8 +356,12 @@ void OnNext(tWidget *psWidget) {
 }
 
 void OnIntroPaint(tWidget *psWidget, tContext *psContext) {
-    EvMotorState_t motorState = MotorControl_GetState();
+    EvMotorState_t motorState = g_lastState;
     if(motorState == EV_MOTOR_STATE_ESTOP_BRAKING || motorState == EV_MOTOR_STATE_FAULT_LATCHED) {
+        tRectangle messageArea = {0, 25, 319, 92};
+        /* This canvas may repaint while latched; clear old glyphs before drawing again. */
+        GrContextForegroundSet(psContext, ClrBlack);
+        GrRectFill(psContext, &messageArea);
         GrContextFontSet(psContext, &g_sFontCm18);
         GrContextForegroundSet(psContext, ClrSilver);
         GrStringDrawCentered(psContext, "An Emergency Stop Has Been Triggered.", -1, 160, 32, 0);
@@ -892,7 +896,8 @@ void UpdateBanner() {
     sRect.i16XMax = GrContextDpyWidthGet(&sContext) - 1;
     sRect.i16YMax = 23;
 
-    EvMotorState_t motorState = MotorControl_GetState();
+    /* g_lastState is applied by this display task before it changes widgets. */
+    EvMotorState_t motorState = g_lastState;
 
     switch (motorState) {
         case EV_MOTOR_STATE_IDLE:
@@ -1020,8 +1025,8 @@ static void prvGUITask( void *pvParameters ) {
            displayedFault != g_lastDisplayedFault ||
            nightConditions != g_lastDisplayedNight ||
            lightStatusValid != g_lastDisplayedLightValid) {
-            UpdateBanner();
             g_lastState = g_currentState;
+            UpdateBanner();
             g_lastDisplayedFault = displayedFault;
             g_lastDisplayedNight = nightConditions;
             g_lastDisplayedLightValid = lightStatusValid;
@@ -1033,9 +1038,9 @@ static void prvGUITask( void *pvParameters ) {
             g_ui32LastConfig = 3;
         }
 
-        if(!faultLatched && g_currentState == EV_MOTOR_STATE_FAULT_LATCHED) {
+        if(!faultLatched && g_lastState == EV_MOTOR_STATE_FAULT_LATCHED) {
             OnFaultLatched();
-        } else if(faultLatched && g_currentState != EV_MOTOR_STATE_FAULT_LATCHED) {
+        } else if(faultLatched && g_lastState != EV_MOTOR_STATE_FAULT_LATCHED) {
             OnFaultCleared();
         }
 

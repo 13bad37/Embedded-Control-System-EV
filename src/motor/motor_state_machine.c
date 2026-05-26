@@ -30,10 +30,15 @@ static void EnterRunning(void)
 static void EnterEStopBraking(EvFaultCode_t fault)
 {
     UARTprintf("State: ESTOP_BRAKING fault=%d\r\n", fault);
-    /* Keep commutation on while moving so the ramped brake command can work. */
-    MotorDriver_SetCommutationEnabled(1U);
     s_latchedFault = fault;
     s_motorState = EV_MOTOR_STATE_ESTOP_BRAKING;
+    /*
+     * A falling speed reference is not a brake command. Stop Hall updates
+     * from restoring drive phases, then ask MotorLib for its hard brake.
+     */
+    MotorDriver_SetPwmDuty(0U);
+    MotorDriver_SetCommutationEnabled(0U);
+    MotorDriver_ApplyEmergencyBrake();
 }
 
 static void EnterFaultLatched(void)

@@ -171,6 +171,11 @@ void MotorDriver_DisableOutputs(void)
     disableMotor();
 }
 
+void MotorDriver_ApplyEmergencyBrake(void)
+{
+    stopMotor(true);
+}
+
 void MotorDriver_SetPwmDuty(uint16_t duty_per_mille)
 {
     setDuty(duty_per_mille);

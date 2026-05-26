@@ -8,6 +8,7 @@ void MotorDriver_RunKickstart(uint32_t elapsed_ms);
 uint8_t MotorDriver_KickstartTimedOut(void);
 void MotorDriver_EnableOutputs(void);
 void MotorDriver_DisableOutputs(void);
+void MotorDriver_ApplyEmergencyBrake(void);
 void MotorDriver_SetPwmDuty(uint16_t duty_per_mille);
 void MotorDriver_UpdateCommutationFromHall(uint8_t hall_a, uint8_t hall_b, uint8_t hall_c);
 uint32_t MotorDriver_GetHallEdgeCount(void);

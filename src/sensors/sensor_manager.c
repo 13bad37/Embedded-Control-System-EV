@@ -20,12 +20,14 @@
 #include "utils/uartstdio.h"
 #include "rtos/message_bus.h"
 #include "semphr.h"
+#include "common/project_config.h"
 
 #define SENSOR_DEFAULT_DISTANCE_MM 300U
 #define SENSOR_DEFAULT_POWER_W    1800U
 #define SENSOR_DEFAULT_COOLING_C  25
 #define SENSOR_DEFAULT_HEATING_C  18
 #define SENSOR_DISTANCE_TRIP_CONFIRM_SAMPLES 2U
+#define SENSOR_DISTANCE_INIT_RETRY_MS 1000U
 
 EvSensorDataRaw_t s_rawData;
 EvSensorData_t s_filteredData;
@@ -49,14 +51,35 @@ static bool s_lightReady = false;
 static TickType_t s_lastLightInitTick = 0U;
 static volatile bool s_lightSampleValid = false;
 static volatile bool s_distanceSampleValid = false;
+static bool s_distanceInitTried = false;
+static bool s_distanceReady = false;
+static TickType_t s_lastDistanceInitTick = 0U;
 static uint8_t s_distanceBlockedSamples = 0U;
 static bool s_distanceSafetyBlocked = false;
 static volatile EvFaultCode_t s_activeFault = EV_FAULT_NONE;
 
+static void TryInitializeDistanceSensor(TickType_t now)
+{
+    bool firstTry = !s_distanceInitTried;
+
+    s_distanceInitTried = true;
+    s_lastDistanceInitTick = now;
+    s_distanceReady = Vl53l0xSensor_Init();
+
+    if (!s_distanceReady && firstTry)
+    {
+        UARTprintf("VL53L0X init failed; retrying on I2C2\r\n");
+    }
+    else if (s_distanceReady && !firstTry)
+    {
+        UARTprintf("VL53L0X online after retry\r\n");
+    }
+}
+
 static void SensorPollingTask(void *pvParameters)
 {
     Sht31Sensor_Init();
-    Vl53l0xSensor_Init(); 
+    TryInitializeDistanceSensor(xTaskGetTickCount());
     /* Light retries in the poll task, so its failure can't hide distance safety. */
     s_environmentReady = true;
 
@@ -69,7 +92,8 @@ void SensorManager_Init(void)
     /* This module owns the queue; one allocation avoids silently losing samples. */
     rawdataQueue = xQueueCreate(32, sizeof(SensorMsg_t));
     configASSERT(rawdataQueue != NULL);
-    xTaskCreate(SensorPollingTask, "SensorTask", 128, NULL, 2, NULL);
+    xTaskCreate(SensorPollingTask, "SensorInit",
+                PROJECT_TASK_STACK_WORDS_MEDIUM, NULL, 2, NULL);
 }
 
 static uint32_t DrainRawDataQueue(void)
@@ -274,17 +298,31 @@ void SensorManager_PollEnvironment(void)
 {
     EvMotorState_t motorState;
     bool motorActive;
+    TickType_t now;
 
     if (!s_environmentReady)
     {
         return;
     }
 
-    /*
-     * Check the safety sensor first, so failed/slow optional reads don't make
-     * the distance status feel stuck when u clear an obstacle.
-     */
-    Vl53l0xSensor_Sample();
+    now = xTaskGetTickCount();
+    if (!s_distanceReady &&
+        (!s_distanceInitTried ||
+         (now - s_lastDistanceInitTick) >=
+             pdMS_TO_TICKS(SENSOR_DISTANCE_INIT_RETRY_MS)))
+    {
+        /* A loose Grove cable at boot should not need a board reset after reseat. */
+        TryInitializeDistanceSensor(now);
+    }
+
+    if (s_distanceReady)
+    {
+        /*
+         * Check the safety sensor first, so failed/slow optional reads don't
+         * make the distance status feel stuck when u clear an obstacle.
+         */
+        Vl53l0xSensor_Sample();
+    }
 
     motorState = MotorStateMachine_GetState();
     motorActive = (motorState == EV_MOTOR_STATE_STARTING ||
@@ -292,7 +330,6 @@ void SensorManager_PollEnvironment(void)
                    motorState == EV_MOTOR_STATE_STOPPING ||
                    motorState == EV_MOTOR_STATE_ESTOP_BRAKING);
 
-    TickType_t now = xTaskGetTickCount();
     if (!motorActive && !s_lightReady &&
         (!s_lightInitTried ||
          (now - s_lastLightInitTick) >= pdMS_TO_TICKS(1000U)))

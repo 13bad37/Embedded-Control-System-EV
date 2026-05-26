@@ -60,6 +60,19 @@ void MotorControl_Run(void)
         s_motorStatus.reference_speed_rpm = s_motorStatus.actual_speed_rpm;
         SpeedController_Reset();
     }
+    else if (state == EV_MOTOR_STATE_STOPPING &&
+             s_previousState != EV_MOTOR_STATE_STOPPING)
+    {
+        /*
+         * The Stop button can be pressed while the motor is still speeding up.
+         * Never start a stop ramp from a target above the speed it has reached.
+         */
+        if (s_motorStatus.reference_speed_rpm > s_motorStatus.actual_speed_rpm)
+        {
+            s_motorStatus.reference_speed_rpm = s_motorStatus.actual_speed_rpm;
+        }
+        SpeedController_Reset();
+    }
     else if (state == EV_MOTOR_STATE_ESTOP_BRAKING &&
              s_previousState != EV_MOTOR_STATE_ESTOP_BRAKING)
     {
@@ -68,10 +81,8 @@ void MotorControl_Run(void)
     }
 
     if (state == EV_MOTOR_STATE_RUNNING ||
-        state == EV_MOTOR_STATE_STOPPING ||
-    state == EV_MOTOR_STATE_ESTOP_BRAKING)
+        state == EV_MOTOR_STATE_STOPPING)
     {
-        uint8_t estop = (state == EV_MOTOR_STATE_ESTOP_BRAKING) ? 1U : 0U;
         uint32_t target = (state == EV_MOTOR_STATE_RUNNING) ?
                           s_motorStatus.desired_speed_rpm : 0U;
 
@@ -79,28 +90,32 @@ void MotorControl_Run(void)
             s_motorStatus.reference_speed_rpm,
             target,
             PROJECT_MOTOR_TASK_PERIOD_MS,
-            estop
+            0U
         );
 
-        if (state == EV_MOTOR_STATE_ESTOP_BRAKING)
-        {
-            /*
-             * Don't run the speed PI during E-stop: if RPM falls quickly it
-             * tries to drive the motor back up, which is the random tweak u saw.
-             */
-            uint32_t ref = s_motorStatus.reference_speed_rpm;
-            s_motorStatus.pwm_duty_per_mille =
-                (ref > 0U) ? (uint16_t)((ref * 15U) / 1500U) : 0U;
-        }
-        else
-        {
-            s_motorStatus.pwm_duty_per_mille = SpeedController_Update(
-                s_motorStatus.reference_speed_rpm,
-                s_motorStatus.actual_speed_rpm
-            );
-        }
+        uint16_t commandedDuty;
 
+        commandedDuty = SpeedController_Update(
+            s_motorStatus.reference_speed_rpm,
+            s_motorStatus.actual_speed_rpm
+        );
+
+        s_motorStatus.pwm_duty_per_mille = commandedDuty;
         MotorDriver_SetPwmDuty(s_motorStatus.pwm_duty_per_mille);
+    }
+    else if (state == EV_MOTOR_STATE_ESTOP_BRAKING)
+    {
+        /*
+         * Keep the specified emergency reference ramp for reporting, but do
+         * not overwrite the brake with forward PWM while the rotor slows.
+         */
+        s_motorStatus.reference_speed_rpm = RampController_Update(
+            s_motorStatus.reference_speed_rpm,
+            0U,
+            PROJECT_MOTOR_TASK_PERIOD_MS,
+            1U
+        );
+        s_motorStatus.pwm_duty_per_mille = 0U;
     }
     else
     {
