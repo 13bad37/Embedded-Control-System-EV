@@ -361,6 +361,7 @@ void OnIntroPaint(tWidget *psWidget, tContext *psContext) {
         GrStringDrawCentered(psContext, "starting the motor.", -1, 160, 75, 0);
         return;
     }
+    WidgetRemove((tWidget *)&g_psFaultAcknowledgeButton);
     ClockUpdate();
 
 }
@@ -617,11 +618,11 @@ static void HandleFaultAcknowledge(void) {
     MotorControl_SetSpeed(g_lastUserSpeed);    /* restore previous speed */
     PushButtonTextSet((tPushButtonWidget *)&g_psStartStopButton, "Start Motor");
     PushButtonFillColorSet((tPushButtonWidget *)&g_psStartStopButton, ClrLightGreen);
+    WidgetRemove((tWidget *)&g_psFaultAcknowledgeButton);
     WidgetRemove((tWidget *)(g_psPanels + g_ui32Panel));
     WidgetAdd(WIDGET_ROOT, (tWidget *)g_psPanels);
     WidgetAdd((tWidget *)g_psPanels, (tWidget *)&g_psStartStopButton);
-    WidgetPaint((tWidget *)g_psPanels);
-    WidgetRemove((tWidget *)&g_psFaultAcknowledgeButton);
+    WidgetPaint((tWidget *)g_psPanels);    
     WidgetPaint((tWidget *)&g_psStartStopButton);
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sNext);
     WidgetAdd(WIDGET_ROOT, (tWidget *)&g_sPrevious);
