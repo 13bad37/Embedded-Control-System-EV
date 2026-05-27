@@ -53,6 +53,8 @@ TaskHandle_t xDisplayTaskHandle = NULL;
 #define PLOT_SIZE 200
 #define DISPLAY_TASK_STACK_WORDS 768U
 #define FAULT_HISTORY_PANEL_INDEX 3U
+#define GUI_MOTOR_SPEED_GRAPH_MAX_RPM 1750U
+#define GUI_HVAC_TEMP_MAX_C 50U
 uint32_t graphX = 1;
 uint32_t graphY[6];
 uint32_t lastGraphY[6];
@@ -61,7 +63,7 @@ bool faultLatched = false;
 /* speed, power, distance, cooling, heating */
 uint32_t g_thresholds[5] = {250, 250, 250, 25, 18};
 uint32_t g_temp_thresholds[5] = {250, 250, 250, 25, 18};
-uint32_t g_max_values[6] = {1000, 2500, 1000, 50, 100, 1000};
+uint32_t g_max_values[6] = {GUI_MOTOR_SPEED_GRAPH_MAX_RPM, 2500, 1000, 50, 100, 1000};
 char clockBuf[GUI_AEST_TIMESTAMP_BUFFER_SIZE];
 char plotBuf[20];
 char configBuf[20];
@@ -87,6 +89,7 @@ void OnConfigButtonPress(tWidget *psWidget);
 void OnThresholdButtonPress(tWidget *psWidget);
 static void OnFaultCleared(void);
 static void DrawPlotGuide(tContext *psContext);
+static void ShowMainFaultPage(void);
 extern tCanvasWidget g_psPanels[];
 uint32_t g_ui32CurrentPlot = 0;
 uint32_t g_ui32LastPlot = 6;
@@ -120,6 +123,13 @@ typedef enum
 static volatile uint32_t g_ui32GuiRequests = GUI_REQ_NONE;
 static uint32_t g_ui32PendingConfig = 0;
 static uint32_t g_ui32PendingPlot = 0;
+
+typedef enum
+{
+    GUI_HVAC_OFF = 0,
+    GUI_HVAC_HEATING,
+    GUI_HVAC_COOLING
+} GuiHvacMode_t;
 
 static void RequestUiWork(uint32_t request)
 {
@@ -161,7 +171,8 @@ tPushButtonWidget g_psClock[] = {
 
 tSliderWidget g_psSliders[] = {
     SliderStruct(g_psPanels + 1, 0, 0,
-                 &g_sKentec320x240x16_SSD2119, 150, 129, 140, 18, 0, 1000, 250,
+                 &g_sKentec320x240x16_SSD2119, 150, 129, 140, 18,
+                 PROJECT_MOTOR_DESIRED_MIN_RPM, PROJECT_MOTOR_DESIRED_MAX_RPM, 250,
                  (SL_STYLE_FILL | SL_STYLE_BACKG_FILL | SL_STYLE_OUTLINE |
                   SL_STYLE_TEXT | SL_STYLE_BACKG_TEXT),
                  ClrGray, ClrBlack, ClrSilver, ClrWhite, ClrWhite,
@@ -494,7 +505,6 @@ void UpdateConfigPage(bool newOpen) {
         if(g_ui32LastConfig != 0 || newOpen) {
             GrContextForegroundSet(&sContext, ClrWhite);
             GrStringDraw(&sContext, "Motor Speed: ", -1, 5, 62, 0);
-            GrStringDraw(&sContext, "Motor State: ", -1, 5, 77, 0);
             GrStringDraw(&sContext, "Desired Speed", -1, 5, 130, 0);
             GrStringDraw(&sContext, "Power Threshold", -1, 5, 150, 0);
             WidgetAdd((tWidget *)(g_psPanels + 1), (tWidget *)g_psSliders);
@@ -510,33 +520,11 @@ void UpdateConfigPage(bool newOpen) {
         WidgetPaint((tWidget *)g_psSliders);
         WidgetPaint((tWidget *)(g_psSliders + 1)); 
         tRectangle configClearRect1 = {100, 62, 160, 78};
-        tRectangle configClearRect2 = {100, 77, 200, 93};
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &configClearRect1);
-        GrRectFill(&sContext, &configClearRect2);
         GrContextForegroundSet(&sContext, ClrWhite);
         usprintf(configBuf, "%drpm", sensorData.motor_speed_rpm);
         GrStringDraw(&sContext, configBuf, -1, 100, 62, 0);
-        switch (g_currentState) {
-            case EV_MOTOR_STATE_IDLE:
-                GrStringDraw(&sContext, "Idle", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_STARTING: 
-                GrStringDraw(&sContext, "Starting", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_RUNNING:
-                GrStringDraw(&sContext, "Running", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_STOPPING:
-                GrStringDraw(&sContext, "Stopping", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_ESTOP_BRAKING:
-                GrStringDraw(&sContext, "EStop Braking", -1, 100, 77, 0);
-                break;
-            case EV_MOTOR_STATE_FAULT_LATCHED:
-                GrStringDraw(&sContext, "Fault Latched", -1, 100, 77, 0);
-                break;
-        }
     } 
     else if(g_ui32CurrentConfig == 1) {
         if(g_ui32LastConfig != 1 || newOpen) {
@@ -579,7 +567,7 @@ void UpdateConfigPage(bool newOpen) {
         WidgetPaint((tWidget *)(g_psSliders + 4));
         tRectangle configClearRect1 = {160, 62, 190, 75};
         tRectangle configClearRect2 = {140, 77, 170, 90};
-        tRectangle configClearRect3 = {63, 92, 125, 105};
+        tRectangle configClearRect3 = {63, 92, 155, 105};
         GrContextForegroundSet(&sContext, ClrBlack);
         GrRectFill(&sContext, &configClearRect1);
         GrRectFill(&sContext, &configClearRect2);
@@ -589,13 +577,31 @@ void UpdateConfigPage(bool newOpen) {
         GrStringDraw(&sContext, configBuf, -1, 160, 62, 0);
         usprintf(configBuf, "%d%%", sensorData.cabin_humidity_rh_x10);
         GrStringDraw(&sContext, configBuf, -1, 140, 77, 0);
-        if (sensorData.cabin_temperature_c_x10 >= (int16_t)g_thresholds[3])
+        GuiHvacMode_t hvacMode;
+        if (sensorData.cabin_temperature_c_x10 <= (int16_t)g_thresholds[4])
         {
-            GrStringDraw(&sContext, "Cooling", -1, 63, 92, 0);
+            hvacMode = GUI_HVAC_HEATING;
         }
-        else if (sensorData.cabin_temperature_c_x10 <= (int16_t)g_thresholds[4])
+        else if (sensorData.cabin_temperature_c_x10 >= (int16_t)g_thresholds[3])
         {
-            GrStringDraw(&sContext, "Heating", -1, 63, 92, 0);
+            hvacMode = GUI_HVAC_COOLING;
+        }
+        else
+        {
+            hvacMode = GUI_HVAC_OFF;
+        }
+
+        /*
+         * Below the low threshold needs heating; above the high threshold
+         * needs cooling. Spell it out here so the two cannot look reversed.
+         */
+        if (hvacMode == GUI_HVAC_HEATING)
+        {
+            GrStringDraw(&sContext, "Heating On", -1, 63, 92, 0);
+        }
+        else if (hvacMode == GUI_HVAC_COOLING)
+        {
+            GrStringDraw(&sContext, "Cooling On", -1, 63, 92, 0);
         }
         else
         {
@@ -615,8 +621,41 @@ static void HandleThresholdButtonPress(void) {
         g_thresholds[2] = g_temp_thresholds[2];
     }
     else if(g_ui32CurrentConfig == 2) {
-        g_thresholds[3] = g_temp_thresholds[3];
-        g_thresholds[4] = g_temp_thresholds[4];
+        uint32_t requestedCooling = g_temp_thresholds[3];
+        uint32_t requestedHeating = g_temp_thresholds[4];
+
+        /*
+         * Heating is always the low point and cooling is always the high one.
+         * If u cross the sliders, keep both choices but put them in that order.
+         */
+        if (requestedHeating > requestedCooling)
+        {
+            uint32_t swap = requestedHeating;
+            requestedHeating = requestedCooling;
+            requestedCooling = swap;
+        }
+        else if (requestedHeating == requestedCooling)
+        {
+            if (requestedCooling < GUI_HVAC_TEMP_MAX_C)
+            {
+                requestedCooling++;
+            }
+            else
+            {
+                requestedHeating--;
+            }
+        }
+
+        g_thresholds[3] = requestedCooling;
+        g_thresholds[4] = requestedHeating;
+        g_temp_thresholds[3] = requestedCooling;
+        g_temp_thresholds[4] = requestedHeating;
+        usprintf(configBuf2, "%d", g_thresholds[3]);
+        usprintf(configBuf3, "%d", g_thresholds[4]);
+        SliderTextSet((tSliderWidget *)(g_psSliders + 3), configBuf2);
+        SliderValueSet((tSliderWidget *)(g_psSliders + 3), g_thresholds[3]);
+        SliderTextSet((tSliderWidget *)(g_psSliders + 4), configBuf3);
+        SliderValueSet((tSliderWidget *)(g_psSliders + 4), g_thresholds[4]);
     }
 
     EvSensorThresholds_t thresholds = SensorManager_GetThresholds();
@@ -669,14 +708,44 @@ void OnConfigButtonPress(tWidget *psWidget) {
 
 void OnFaultLatched(void) {
     faultLatched = true;
-    /* Put ACK on the root so u can clear a fault from whichever page is open. */
-    WidgetAdd(WIDGET_ROOT, (tWidget *)&g_psFaultAcknowledgeButton);
-    WidgetPaint((tWidget *)&g_psFaultAcknowledgeButton);
+    ShowMainFaultPage();
+}
+
+static void ShowMainFaultPage(void) {
+    if (g_ui32Panel != 0U)
+    {
+        WidgetRemove((tWidget *)(g_psPanels + g_ui32Panel));
+        g_ui32Panel = 0U;
+        WidgetAdd(WIDGET_ROOT, (tWidget *)g_psPanels);
+    }
+
+    PushButtonImageOff(&g_sPrevious);
+    PushButtonTextOff(&g_sPrevious);
+    PushButtonFillOn(&g_sPrevious);
+    /* Bring u home for ACK first, but still let u check other pages after. */
+    PushButtonImageOn(&g_sNext);
+    PushButtonTextOn(&g_sNext);
+    PushButtonFillOff(&g_sNext);
+
+    /*
+     * ACK belongs to the main panel only. The old root attachment is why it
+     * was drawing on top of Setup and Plots.
+     */
+    WidgetAdd((tWidget *)g_psPanels, (tWidget *)&g_psFaultAcknowledgeButton);
+    WidgetPaint((tWidget *)g_psPanels);
+    WidgetPaint((tWidget *)&g_sPrevious);
+    WidgetPaint((tWidget *)&g_sNext);
+    WidgetPaint((tWidget *)&g_psClock);
+    UpdateBanner();
 }
 
 static void OnFaultCleared(void) {
     faultLatched = false;
     WidgetRemove((tWidget *)&g_psFaultAcknowledgeButton);
+    /* We return to the main page after ACK, so only Next becomes available. */
+    PushButtonImageOn(&g_sNext);
+    PushButtonTextOn(&g_sNext);
+    PushButtonFillOff(&g_sNext);
     WidgetPaint((tWidget *)(g_psPanels + g_ui32Panel));
     WidgetPaint((tWidget *)&g_sPrevious);
     WidgetPaint((tWidget *)&g_sNext);
@@ -1117,10 +1186,10 @@ static void prvGUITask( void *pvParameters ) {
 void GuiDashboard_Init(void) {
     EvSensorThresholds_t thresholds = SensorManager_GetThresholds();
     /*
-     * No RTC is fitted, so start from the AEST compile timestamp. The build
-     * script forces this file to rebuild each flash so the value isn't stale.
+     * There is no RTC on this board, so just start at the demo time u asked for.
+     * It still ticks normally from here once the GUI task is running.
      */
-    (void)GuiAestClock_Init(__DATE__, __TIME__);
+    (void)GuiAestClock_Init(__DATE__, "11:15:00");
     GuiFaultHistory_Init();
     g_thresholds[1] = thresholds.max_motor_power_w;
     g_thresholds[2] = thresholds.min_distance_mm;

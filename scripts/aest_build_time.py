@@ -3,8 +3,8 @@ import time
 
 Import("env")
 
-# Force the clock-owning source to rebuild each flash, bc cached .o files made
-# __TIME__ stay old even after u flashed again.
+# Keep the build date current for the display; the demo start time itself is
+# now hardcoded in the dashboard.
 os.environ["TZ"] = "Australia/Brisbane"
 if hasattr(time, "tzset"):
     time.tzset()
@@ -19,6 +19,6 @@ os.makedirs(generated_dir, exist_ok=True)
 with open(timestamp_stamp, "w") as stamp_file:
     stamp_file.write("{} {}\n".format(now_date, now_time))
 
-# Dashboard uses __DATE__/__TIME__; this dependency makes that object fresh now.
+# Dashboard still uses __DATE__; this dependency makes that date fresh now.
 dashboard_object = os.path.join(env.subst("$BUILD_DIR"), "src", "gui", "gui_dashboard.o")
 env.Depends(dashboard_object, timestamp_stamp)

@@ -152,6 +152,18 @@ void MotorControl_SetSpeed(uint32_t rpm)
         return;
     }
 
+    /*
+     * non 0 speed request stays in the same range so another caller can't go past 1500rpm
+     */
+    if (rpm != 0U && rpm < PROJECT_MOTOR_DESIRED_MIN_RPM)
+    {
+        rpm = PROJECT_MOTOR_DESIRED_MIN_RPM;
+    }
+    else if (rpm > PROJECT_MOTOR_DESIRED_MAX_RPM)
+    {
+        rpm = PROJECT_MOTOR_DESIRED_MAX_RPM;
+    }
+
     s_motorStatus.desired_speed_rpm = rpm;
     if (rpm == 0U &&
         (state == EV_MOTOR_STATE_RUNNING || state == EV_MOTOR_STATE_STARTING))

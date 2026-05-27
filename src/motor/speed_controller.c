@@ -2,10 +2,10 @@
 #include "common/project_config.h"
 
 #define PI_KP               0.01f
-#define PI_KI               0.008f
+#define PI_KI               0.001f
 #define PI_INTEGRAL_MAX     3.0f
 #define PI_INTEGRAL_MIN    -3.0f
-#define PI_OUTPUT_MAX       28U     /* reduced from 50 — prevents overcurrent */
+#define PI_OUTPUT_MAX       22U     /* reduced from 50 — prevents overcurrent */
 #define PI_OUTPUT_MIN       0U
 
 typedef struct {
@@ -34,7 +34,7 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
 {
     float error = (float)((int32_t)reference_rpm - (int32_t)measured_rpm);
 
-    if (error > -800.0f && error < 800.0f)
+    if (error > -750.0f && error < 750.0f)
     {
         s_pi.integral += error * (PROJECT_MOTOR_TASK_PERIOD_MS / 1000.0f);
         if (s_pi.integral > PI_INTEGRAL_MAX) { s_pi.integral = PI_INTEGRAL_MAX; }
@@ -42,7 +42,7 @@ uint16_t SpeedController_Update(uint32_t reference_rpm, uint32_t measured_rpm)
     }
 
     float correction = (s_pi.kp * error) + (s_pi.ki * s_pi.integral);
-    float feedforward = ((float)reference_rpm / 1100.0f) * 17.0f;
+    float feedforward = ((float)reference_rpm / 1100.0f) * 16.0f + 1.5f;
     float output = feedforward + correction;
 
 
