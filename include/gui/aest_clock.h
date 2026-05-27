@@ -3,7 +3,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#define GUI_AEST_TIMESTAMP_BUFFER_SIZE 23U
+#define GUI_AEST_TIMESTAMP_BUFFER_SIZE 26U
 
 bool GuiAestClock_Init(const char *build_date, const char *build_time);
 void GuiAestClock_AdvanceSeconds(uint32_t elapsed_seconds);

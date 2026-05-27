@@ -3,8 +3,22 @@ import time
 
 Import("env")
 
-# GCC expands __DATE__/__TIME__ using the process TZ to keep the display on AEST.
+# Force the clock-owning source to rebuild each flash, bc cached .o files made
+# __TIME__ stay old even after u flashed again.
 os.environ["TZ"] = "Australia/Brisbane"
 if hasattr(time, "tzset"):
     time.tzset()
 env["ENV"]["TZ"] = "Australia/Brisbane"
+
+generated_dir = os.path.join(env.subst("$BUILD_DIR"), "generated")
+timestamp_stamp = os.path.join(generated_dir, "aest_build_time.stamp")
+now_date = time.strftime("%b %d %Y")
+now_time = time.strftime("%H:%M:%S")
+
+os.makedirs(generated_dir, exist_ok=True)
+with open(timestamp_stamp, "w") as stamp_file:
+    stamp_file.write("{} {}\n".format(now_date, now_time))
+
+# Dashboard uses __DATE__/__TIME__; this dependency makes that object fresh now.
+dashboard_object = os.path.join(env.subst("$BUILD_DIR"), "src", "gui", "gui_dashboard.o")
+env.Depends(dashboard_object, timestamp_stamp)

@@ -135,9 +135,23 @@ void GuiAestClock_AdvanceSeconds(uint32_t elapsed_seconds)
 
 void GuiAestClock_Format(char *buffer, uint32_t buffer_size)
 {
+    uint8_t displayHour;
+    bool isPm;
+
     if (buffer == 0 || buffer_size < GUI_AEST_TIMESTAMP_BUFFER_SIZE)
     {
         return;
+    }
+
+    /*
+     * Show the time how we'd normally say it: 20:11 is 08:11 PM.
+     * Keep this explicit bc noon/midnight are easy to accidentally flip.
+     */
+    isPm = (s_now.hour >= 12U);
+    displayHour = (uint8_t)(s_now.hour % 12U);
+    if (displayHour == 0U)
+    {
+        displayHour = 12U;
     }
 
     buffer[0] = (char)('0' + (s_now.day / 10U));
@@ -149,8 +163,8 @@ void GuiAestClock_Format(char *buffer, uint32_t buffer_size)
     buffer[6] = (char)('0' + ((s_now.year / 10U) % 10U));
     buffer[7] = (char)('0' + (s_now.year % 10U));
     buffer[8] = ' ';
-    buffer[9] = (char)('0' + (s_now.hour / 10U));
-    buffer[10] = (char)('0' + (s_now.hour % 10U));
+    buffer[9] = (char)('0' + (displayHour / 10U));
+    buffer[10] = (char)('0' + (displayHour % 10U));
     buffer[11] = ':';
     buffer[12] = (char)('0' + (s_now.minute / 10U));
     buffer[13] = (char)('0' + (s_now.minute % 10U));
@@ -158,9 +172,12 @@ void GuiAestClock_Format(char *buffer, uint32_t buffer_size)
     buffer[15] = (char)('0' + (s_now.second / 10U));
     buffer[16] = (char)('0' + (s_now.second % 10U));
     buffer[17] = ' ';
-    buffer[18] = 'A';
-    buffer[19] = 'E';
-    buffer[20] = 'S';
-    buffer[21] = 'T';
-    buffer[22] = '\0';
+    buffer[18] = isPm ? 'P' : 'A';
+    buffer[19] = 'M';
+    buffer[20] = ' ';
+    buffer[21] = 'A';
+    buffer[22] = 'E';
+    buffer[23] = 'S';
+    buffer[24] = 'T';
+    buffer[25] = '\0';
 }

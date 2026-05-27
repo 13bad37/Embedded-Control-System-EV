@@ -156,7 +156,7 @@ tPushButtonWidget g_psClock[] = {
                         &g_sKentec320x240x16_SSD2119, 60, 222, 200, 16,
                         PB_STYLE_FILL | PB_STYLE_TEXT,
                         0, 0, 0, ClrWhite,
-                        &g_sFontFixed6x8, "--/--/-- --:--:-- AEST", 0, 0, 0, 0, 0),
+                        &g_sFontFixed6x8, "--/--/-- --:--:-- -- AEST", 0, 0, 0, 0, 0),
 };
 
 tSliderWidget g_psSliders[] = {
@@ -1116,7 +1116,10 @@ static void prvGUITask( void *pvParameters ) {
 
 void GuiDashboard_Init(void) {
     EvSensorThresholds_t thresholds = SensorManager_GetThresholds();
-    /* No RTC is fitted; the build supplies an AEST starting point for this session. */
+    /*
+     * No RTC is fitted, so start from the AEST compile timestamp. The build
+     * script forces this file to rebuild each flash so the value isn't stale.
+     */
     (void)GuiAestClock_Init(__DATE__, __TIME__);
     GuiFaultHistory_Init();
     g_thresholds[1] = thresholds.max_motor_power_w;
