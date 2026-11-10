@@ -26,7 +26,7 @@ void powerTimerInit(void)
  
     TimerConfigure(TIMER2_BASE, TIMER_CFG_PERIODIC);
 
-    /* Raw current data needs >=150 Hz for the assignment and for fast trips. */
+    /* Legacy timer setup for 150 Hz current sampling; the active path uses SensorTask. */
     TimerLoadSet(TIMER2_BASE, TIMER_A,
                  (PROJECT_SYSTEM_CLOCK_HZ / POWER_SAMPLE_RATE_HZ) - 1U);
  

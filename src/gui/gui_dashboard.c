@@ -1234,7 +1234,7 @@ void GuiDashboard_Update(void)
     lightStatusValid = SensorManager_HasAmbientLightReading();
     bool isNight = lightStatusValid && (tempSensorData.ambient_light_lux < 5U);
     if(lightStatusValid && isNight != nightConditions) {
-        /* Headlight LED is on only at night, exactly as the task sheet says. */
+        /* Turn on the headlight indicator below the night-light threshold. */
         GPIOPinWrite(GPIO_PORTN_BASE, GPIO_PIN_0,
                      isNight ? GPIO_PIN_0 : 0U);
         nightConditions = isNight;

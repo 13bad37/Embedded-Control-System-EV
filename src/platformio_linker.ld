@@ -1,8 +1,7 @@
 /*
- * TM4C1294 linker script for the PlatformIO/GCC skeleton.
+ * TM4C1294 linker script for the PlatformIO/GCC build.
  *
- * This is build plumbing, not assignment logic. Keep it boring unless the final
- * lab starter files require something different.
+ * Maps the vector table, code and read-only data to flash, and writable data to SRAM.
  */
 
 MEMORY

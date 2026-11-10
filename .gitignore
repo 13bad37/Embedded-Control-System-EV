@@ -34,10 +34,8 @@ platformio.local.ini
 .codex
 .codex/
 
-# Assignment documents
+# Local reports and captures
 report.docx
-EGH456_Assignment (1)-1.pdf
+*.pdf
 images/
 docs/superpowers/
-docs/superpowers/specs/
-docs/superpowers/plans/

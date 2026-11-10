@@ -509,7 +509,7 @@ bool Vl53l0xSensor_Init(void)
     }
 
     /*
-     * The QUT I2C breakout supplies 3.3 V. Select the sensor's high-voltage
+     * The I2C breakout supplies 3.3 V. Select the sensor's high-voltage
      * I/O pad mode before doing its one-time boot setup.
      */
     if (!ReadRegister(VL53L0X_REG_VHV_CONFIG_PAD_SCL_SDA, &value) ||

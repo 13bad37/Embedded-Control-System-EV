@@ -20,8 +20,7 @@ void SensorSampleTimerIsr(void)
 void TouchscreenIsr(void)
 {
     /*
-     * Task sheet said that the touchscreen needs ISr and uses 1/ADC0 
-     * We'll wire this up once the GUI code works
+     * Compatibility hook; the touchscreen driver owns its active ADC/interrupt path.
      */
 }
 
